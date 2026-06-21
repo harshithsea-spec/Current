@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- OLED Dark Background with rounded corners for iOS -->
+  <rect width="512" height="512" rx="112" fill="#000000"/>
+  <!-- Material 3 Primary Container Glow -->
+  <circle cx="256" cy="256" r="180" fill="#00639A"/>
+  <!-- Bright Rupee Symbol -->
+  <text x="256" y="335" font-family="sans-serif" font-size="240" font-weight="bold" fill="#FFFFFF" text-anchor="middle">₹</text>
+</svg>
