@@ -1,0 +1,1852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Rupee Tracker Pro</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#000000">
+    <link rel="apple-touch-icon" href="icon.svg">
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+    
+    <!-- Data-First Typography: Inter for UI, Space Mono for Data -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,0..1,0" />
+    
+    <style>
+        /* Strict 5-Token Semantic OLED Palette */
+        :root {
+            --bg: #000000;
+            --surface: #111111;
+            --surface-high: #1A1C1E;
+            --outline: #333333;
+            
+            --primary: #6366F1; /* Deep Indigo */
+            --primary-glow: rgba(99, 102, 241, 0.25);
+            
+            --income: #22C55E; /* Emerald Green */
+            --income-bg: rgba(34, 197, 94, 0.1);
+            
+            --expense: #F43F5E; /* Crimson Red */
+            --expense-bg: rgba(244, 63, 94, 0.1);
+            
+            --text-main: #FFFFFF;
+            --text-muted: #888888;
+
+            --spring-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+            --spring-smooth: cubic-bezier(0.25, 1, 0.5, 1);
+        }
+        
+        body { font-family: 'Inter', -apple-system, sans-serif; background-color: var(--bg); color: var(--text-main); margin: 0; padding: 0 0 120px 0; overflow-x: hidden; -webkit-tap-highlight-color: transparent; }
+        body.modal-open, body.locked { overflow: hidden; }
+        
+        .mono { font-family: 'Space Mono', monospace; letter-spacing: -0.5px;}
+
+        .material-symbols-rounded { font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24; display: inline-block; vertical-align: middle; line-height: 1; }
+        
+        /* APP STARTUP LOADER */
+        #loader-screen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: var(--bg); z-index: 99999; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: opacity 0.4s ease, visibility 0.4s; }
+        .loader-spinner { width: 40px; height: 40px; border: 3px solid var(--surface-high); border-top: 3px solid var(--primary); border-radius: 50%; animation: spin 1s var(--spring-smooth) infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #loader-screen.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+        /* PREMIUM PIN LOCK SCREEN */
+        #lock-screen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: var(--bg); z-index: 90000; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: transform 0.5s var(--spring-smooth), opacity 0.4s ease; padding: 20px; box-sizing: border-box; }
+        #lock-screen.hidden { transform: translateY(100vh); opacity: 0; pointer-events: none; }
+        .lock-icon { font-size: 2.5rem !important; color: var(--primary); margin-bottom: 24px; font-variation-settings: 'FILL' 1 !important;}
+        .lock-title { font-size: 1.1rem; font-weight: 500; margin-bottom: 40px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 2px;}
+        
+        .pin-dots-container { display: flex; gap: 24px; margin-bottom: 56px; height: 16px; align-items: center; }
+        .pin-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--outline); transition: background-color 0.2s, border-color 0.2s, transform 0.2s; background-color: transparent;}
+        .pin-dot.filled { background-color: var(--primary); border-color: var(--primary); transform: scale(1.2);}
+        .pin-dot.error { border-color: var(--expense); background-color: var(--expense); }
+        
+        .pin-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px 32px; max-width: 300px; margin: 0 auto; }
+        .pin-btn { width: 72px; height: 72px; border-radius: 50%; background: transparent; border: 1px solid var(--surface-high); font-size: 2rem; font-weight: 400; font-family: 'Space Mono', monospace; color: var(--text-main); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease; margin: 0; padding: 0;}
+        .pin-btn:active { transform: scale(0.9); background-color: var(--primary-glow); border-color: var(--primary); box-shadow: 0 0 20px var(--primary-glow); }
+        .pin-btn.empty { border: none; pointer-events: none; }
+        .pin-btn .material-symbols-rounded { font-size: 1.8rem; }
+
+        .shake-animation { animation: shake 0.4s var(--spring-bounce); }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-10px); } 50% { transform: translateX(10px); } 75% { transform: translateX(-10px); } }
+
+        .container { max-width: 600px; margin: auto; padding: 0 16px; overflow-x: hidden; }
+        
+        header { position: sticky; top: 0; z-index: 1000; background-color: rgba(0,0,0,0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); display: flex; justify-content: space-between; align-items: center; padding: 20px 0 12px 0; margin-bottom: 12px; }
+        .header-text h2 { margin: 0; font-size: 1.5rem; font-weight: 700; letter-spacing: -0.5px; }
+        .header-text p { margin: 2px 0 0 0; font-size: 0.85rem; color: var(--text-muted); font-weight: 500; }
+        .header-actions { display: flex; gap: 8px; align-items: center; }
+        .action-btn { background: var(--surface); border: 1px solid var(--surface-high); font-size: 1.2rem; cursor: pointer; padding: 10px; border-radius: 50%; color: var(--text-main); transition: transform 0.4s var(--spring-bounce), background-color 0.2s; display: flex; align-items: center; justify-content: center; }
+        .action-btn:active { background-color: var(--surface-high); transform: scale(0.85); }
+        .action-btn:disabled { opacity: 0.3; pointer-events: none; border-color: transparent;}
+        
+        .tab-content { display: none; will-change: transform, opacity; -webkit-backface-visibility: hidden; backface-visibility: hidden; transform: translateZ(0); }
+        .tab-content.active { display: block; }
+        .slide-right { animation: fadeForward 0.4s var(--spring-smooth) forwards; }
+        .slide-left { animation: fadeBackward 0.4s var(--spring-smooth) forwards; }
+        @keyframes fadeForward { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes fadeBackward { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+        
+        .card { background: var(--surface); padding: 24px; border-radius: 24px; border: 1px solid var(--surface-high); margin-bottom: 16px; }
+        
+        .hero-balance-card { background: linear-gradient(135deg, #1E1B4B 0%, var(--bg) 100%); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 32px; padding: 32px 24px; margin-bottom: 24px; position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; text-align: center; }
+        .hero-balance-card.deficit { background: linear-gradient(135deg, #4C0519 0%, var(--bg) 100%); border-color: rgba(244, 63, 94, 0.2); }
+        .hero-label { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px;}
+        .hero-amount { font-size: 3.5rem; font-weight: 700; color: #FFFFFF; margin: 0 0 24px 0; line-height: 1; display: flex; align-items: baseline; justify-content: center; gap: 4px;}
+        .hero-currency { font-size: 1.8rem; color: var(--text-muted); font-weight: 500;}
+        
+        .wallet-pills-container { display: flex; gap: 12px; justify-content: center; width: 100%; z-index: 1;}
+        .wallet-pill { background: var(--surface); padding: 10px 16px; border-radius: 100px; display: flex; align-items: center; gap: 8px; font-size: 0.95rem; font-weight: 600; flex: 1; justify-content: center; border: 1px solid var(--surface-high); color: var(--text-main);}
+        .wallet-pill .material-symbols-rounded { font-size: 1.1rem; color: var(--primary);}
+
+        .section-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 16px; padding: 0 4px;}
+        .section-header h3 { margin: 0; font-size: 1.1rem; color: var(--text-main); font-weight: 600; letter-spacing: -0.3px;}
+        .section-subtitle { font-size: 0.85rem; color: var(--text-muted); margin: 0 0 16px 4px;}
+
+        /* Compact Transaction List Polish */
+        .swipe-container { position: relative; overflow: hidden; border-radius: 20px; margin-bottom: 10px; background: var(--expense); touch-action: pan-y; will-change: transform, opacity; -webkit-backface-visibility: hidden; backface-visibility: hidden; transform: translateZ(0); transition: opacity 0.3s ease;}
+        .swipe-action-delete, .swipe-action-settle { position: absolute; right: 0; top: 0; bottom: 0; width: 80px; display: flex; align-items: center; justify-content: center; color: #FFF; z-index: 1; border-radius: 20px; cursor: pointer; }
+        .swipe-action-settle { background-color: var(--income); }
+        .swipe-action-icon { font-size: 1.8rem !important; transform: scale(0.5); opacity: 0; transition: transform 0.4s var(--spring-bounce), opacity 0.3s; }
+        
+        .swipe-content { position: relative; z-index: 2; background-color: var(--surface); border-radius: 20px; border: 1px solid var(--surface-high); transition: transform 0.5s var(--spring-bounce); }
+        .swipe-content.dragging { transition: none !important; } .swipe-content.swiped { transform: translateX(-80px); border-color: transparent;}
+        .swipe-container.deleting { animation: collapseSpring 0.4s var(--spring-smooth) forwards; pointer-events: none; }
+        @keyframes collapseSpring { 0% { opacity: 1; transform: scale(1); max-height: 100px; margin-bottom: 10px; } 40% { opacity: 0; transform: scale(0.95); max-height: 100px; margin-bottom: 10px; } 100% { opacity: 0; transform: scale(0.95); max-height: 0; margin-bottom: 0; border: none; padding: 0;} }
+
+        .tx-row { display: flex; align-items: center; padding: 16px; gap: 16px; }
+        .tx-icon { width: 44px; height: 44px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0;}
+        .tx-icon.exp-icon { background: var(--expense-bg); color: var(--expense); }
+        .tx-icon.inc-icon { background: var(--income-bg); color: var(--income); }
+        .tx-details { flex: 1; display: flex; flex-direction: column; gap: 2px; overflow: hidden; pointer-events: none;}
+        .tx-title { font-weight: 600; font-size: 1rem; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+        .tx-meta { font-size: 0.8rem; color: var(--text-muted); font-weight: 500;}
+        .tx-amount { font-size: 1.1rem; font-weight: 700; flex-shrink: 0; pointer-events: none;}
+        .text-expense { color: var(--expense); } .text-income { color: var(--income); }
+
+        /* Unified Log Tab segmented control */
+        .segmented-control { display: flex; background: var(--surface); border: 1px solid var(--surface-high); border-radius: 100px; padding: 4px; margin-bottom: 24px; position: relative; }
+        .segmented-control input[type="radio"] { display: none; }
+        .segment-btn { flex: 1; text-align: center; padding: 12px 0; font-size: 0.95rem; font-weight: 600; color: var(--text-muted); border-radius: 100px; cursor: pointer; transition: all 0.3s; z-index: 1; }
+        .segmented-control input[type="radio"]:checked + .segment-btn { background-color: var(--surface-high); color: var(--text-main); }
+        .segmented-control.log-toggle input[type="radio"]#log-exp:checked + .segment-btn { background-color: var(--expense-bg); color: var(--expense); border: 1px solid rgba(244,63,94,0.2);}
+        .segmented-control.log-toggle input[type="radio"]#log-inc:checked + .segment-btn { background-color: var(--income-bg); color: var(--income); border: 1px solid rgba(34,197,94,0.2);}
+
+        .hero-amount-wrapper { background: var(--surface); border: 1px solid var(--surface-high); border-radius: 24px; padding: 24px 16px; margin-bottom: 24px; display: flex; flex-direction: column; align-items: center; transition: border-color 0.2s, background-color 0.2s; }
+        .hero-amount-wrapper:focus-within { border-color: var(--primary); }
+        .hero-amount-inner { display: flex; align-items: center; justify-content: center; width: 100%;}
+        .currency-symbol { font-size: 2rem; font-weight: 500; color: var(--text-muted); margin-right: 8px; font-family: 'Space Mono', monospace;}
+        .massive-input { font-size: 3rem; font-weight: 700; color: var(--text-main); background: transparent; border: none; outline: none; width: 100%; text-align: center; font-family: 'Space Mono', monospace; padding: 0; letter-spacing: -1px; }
+        .massive-input::placeholder { color: var(--outline); }
+        
+        .category-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 24px; }
+        .cat-box { display: flex; flex-direction: column; align-items: center; justify-content: center; background: transparent; border: 1px solid var(--surface-high); border-radius: 16px; padding: 14px 4px; cursor: pointer; transition: all 0.3s var(--spring-bounce); }
+        .cat-box .material-symbols-rounded { font-size: 1.6rem; margin-bottom: 8px; color: var(--text-muted); transition: color 0.2s;}
+        .cat-box span.cat-label { font-size: 0.7rem; font-weight: 600; color: var(--text-muted); text-align: center; transition: color 0.2s;}
+        .cat-box:active { transform: scale(0.9); }
+        .cat-box.active-cat.exp-cat { background-color: var(--expense-bg); border-color: rgba(244,63,94,0.3); }
+        .cat-box.active-cat.exp-cat .material-symbols-rounded, .cat-box.active-cat.exp-cat span.cat-label { color: var(--expense); }
+        .cat-box.active-cat.inc-cat { background-color: var(--income-bg); border-color: rgba(34,197,94,0.3); }
+        .cat-box.active-cat.inc-cat .material-symbols-rounded, .cat-box.active-cat.inc-cat span.cat-label { color: var(--income); }
+        .cat-box.active-cat.neu-cat { background-color: var(--primary-glow); border-color: var(--primary); }
+        .cat-box.active-cat.neu-cat .material-symbols-rounded, .cat-box.active-cat.neu-cat span.cat-label { color: var(--primary); }
+
+        input[type="text"], input[type="date"], select { width: 100%; padding: 18px 16px; border: 1px solid var(--surface-high); border-radius: 16px; box-sizing: border-box; font-size: 1rem; background-color: var(--surface); color: var(--text-main); font-family: 'Inter', sans-serif; transition: border 0.2s ease; font-weight: 500;}
+        input[type="text"]:focus, input[type="date"]:focus, select:focus { outline: none; border: 1px solid var(--primary); }
+        
+        .icon-input-wrapper { position: relative; width: 100%; margin-bottom: 12px; }
+        .icon-input-wrapper .material-symbols-rounded { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 1.4rem; transition: color 0.2s; pointer-events: none; }
+        .icon-input-wrapper input { padding-left: 48px; }
+        .icon-input-wrapper:focus-within .material-symbols-rounded { color: var(--primary); }
+
+        button.primary-btn { width: 100%; padding: 18px; margin-top: 16px; border: none; border-radius: 16px; cursor: pointer; font-size: 1.05rem; font-weight: 600; font-family: 'Inter', sans-serif; transition: transform 0.4s var(--spring-bounce), background-color 0.2s; background-color: var(--primary); color: #FFF; display: flex; justify-content: center; align-items: center; gap: 8px; }
+        button.primary-btn:active { transform: scale(0.96); }
+        .btn-expense { background-color: var(--expense) !important; color: #FFF !important; } 
+        .btn-income { background-color: var(--income) !important; color: #000 !important; } 
+
+        /* Improved Goals UI */
+        .goals-carousel { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 8px; scrollbar-width: none; margin: 0 -16px; padding: 0 16px 8px 16px; -webkit-overflow-scrolling: touch; }
+        .goals-carousel::-webkit-scrollbar { display: none; }
+        .goal-card { min-width: 280px; scroll-snap-align: center; flex-shrink: 0; background-color: var(--surface); padding: 20px; border-radius: 20px; border: 1px solid var(--surface-high); margin-bottom: 0; display: flex; flex-direction: column; gap: 12px;}
+        .goal-info { display: flex; justify-content: space-between; align-items: flex-end;}
+        .goal-title { font-weight: 600; font-size: 1.05rem; color: var(--text-main); }
+        .goal-amounts { font-weight: 700; font-size: 0.95rem; color: var(--primary); }
+        
+        .progress-track { width: 100%; height: 8px; background-color: var(--surface-high); border-radius: 100px; overflow: hidden; pointer-events: none;}
+        .progress-fill { height: 100%; border-radius: 100px; background-color: var(--primary); transition: width 1s var(--spring-smooth), background-color 0.3s; width: 0%; }
+        .progress-fill.budget-warning { background-color: var(--expense); }
+        .progress-fill.budget-normal { background-color: var(--income); }
+        
+        .goal-meta { display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;}
+
+        /* More Menu Grid */
+        .more-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px;}
+        .more-card { background: var(--surface); border: 1px solid var(--surface-high); border-radius: 20px; padding: 24px 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; cursor: pointer; transition: all 0.3s var(--spring-bounce); color: var(--text-main); text-align: center;}
+        .more-card .material-symbols-rounded { font-size: 2rem; color: var(--primary); }
+        .more-card-title { font-weight: 600; font-size: 1rem; }
+        .more-card:active { transform: scale(0.92); border-color: var(--primary); background: var(--primary-glow);}
+        .more-card.settings-card .material-symbols-rounded { color: var(--text-muted); }
+
+        /* Sub-tab Header */
+        .sub-header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px;}
+        .back-btn { background: var(--surface); border: 1px solid var(--surface-high); color: var(--text-main); width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;}
+        .sub-header h2 { margin: 0; font-size: 1.4rem; font-weight: 700;}
+
+        /* Charts */
+        .chart-container { position: relative; height: 240px; width: 100%; margin-top: 16px; display: flex; align-items: center; justify-content: center;}
+        
+        /* 5-Item Bottom Nav */
+        .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; min-height: 80px; background-color: rgba(0,0,0,0.9); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; padding-bottom: env(safe-area-inset-bottom, 12px); z-index: 1000; border-top: 1px solid var(--surface-high); }
+        .nav-item { background: none; border: none; color: var(--text-muted); font-size: 0.65rem; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0; font-family: 'Inter', sans-serif; flex: 1; cursor: pointer; transition: transform 0.4s var(--spring-bounce); } 
+        .nav-item:active { transform: scale(0.85); }
+        .nav-icon-wrapper { width: 48px; height: 28px; border-radius: 14px; display: flex; align-items: center; justify-content: center; transition: background-color 0.3s ease;}
+        .nav-icon { font-size: 1.4rem; transition: all 0.3s ease; font-variation-settings: 'FILL' 0, 'wght' 500; }
+        .nav-item.active .nav-icon { transform: scale(1.1); font-variation-settings: 'FILL' 1, 'wght' 600; color: #FFF;}
+        .nav-item.active .nav-icon-wrapper { background-color: var(--primary); }
+        .nav-item.active .nav-text { color: #FFF; }
+        
+        .pop-in { opacity: 0; animation: popInSpring 0.5s var(--spring-bounce) forwards; }
+        @keyframes popInSpring { 0% { opacity: 0; transform: translateY(15px); } 100% { opacity: 1; transform: translateY(0); } }
+
+        /* Other Utilities */
+        .contact-scroll { display: flex; overflow-x: auto; gap: 10px; padding-bottom: 8px; margin-bottom: 16px; scrollbar-width: none;}
+        .contact-scroll::-webkit-scrollbar { display: none; }
+        .contact-chip { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--surface-high); padding: 4px 14px 4px 4px; border-radius: 100px; cursor: pointer; font-weight: 500; font-size: 0.9rem;}
+        .contact-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--surface-high); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8rem;}
+
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(8px); z-index: 3000; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; padding: 20px; }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal-content { width: 100%; max-width: 400px; transform: translateY(40px) scale(0.95); transition: transform 0.5s var(--spring-bounce); }
+        .modal-overlay.active .modal-content { transform: translateY(0) scale(1); }
+        
+        #toast { visibility: hidden; min-width: 250px; background: #FFF; color: #000; text-align: center; padding: 14px 20px; border-radius: 100px; position: fixed; z-index: 4000; left: 50%; bottom: 100px; transform: translateX(-50%); font-size: 0.95rem; font-weight: 600; box-shadow: 0 8px 24px rgba(0,0,0,0.3);}
+        #toast.show { visibility: visible; animation: fadein 0.5s var(--spring-bounce), fadeout 0.4s 2.5s forwards; }
+        @keyframes fadein { from {bottom: 80px; opacity: 0; transform: translateX(-50%) scale(0.9);} to {bottom: 100px; opacity: 1; transform: translateX(-50%) scale(1);} }
+        @keyframes fadeout { from {bottom: 100px; opacity: 1;} to {bottom: 80px; opacity: 0;} }
+
+        /* Settings List */
+        .settings-card { background: var(--surface); border-radius: 20px; border: 1px solid var(--surface-high); overflow: hidden; margin-bottom: 24px;}
+        .settings-item { display: flex; align-items: center; padding: 16px 20px; cursor: pointer; transition: background-color 0.2s;}
+        .settings-item:active { background-color: var(--surface-high); }
+        .settings-icon { font-size: 1.4rem; color: var(--text-muted); margin-right: 16px;}
+        .settings-text { flex: 1; display: flex; flex-direction: column; gap: 2px;}
+        .settings-title { font-size: 1.05rem; font-weight: 500;}
+        .settings-desc { font-size: 0.8rem; color: var(--text-muted);}
+        .settings-divider { height: 1px; background: var(--surface-high); margin: 0 20px;}
+        
+        /* Switch */
+        .switch { position: relative; display: inline-block; width: 48px; height: 28px; flex-shrink: 0;} .switch input { opacity: 0; width: 0; height: 0; } 
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--surface-high); border: 2px solid var(--outline); transition: .3s; border-radius: 100px; box-sizing: border-box;} 
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: var(--text-muted); transition: transform 0.4s var(--spring-bounce); border-radius: 50%; } 
+        input:checked + .slider { background-color: var(--primary); border-color: var(--primary); } 
+        input:checked + .slider:before { transform: translateX(20px); background-color: #FFF;}
+
+        .empty-state { padding: 40px 20px; text-align: center; color: var(--text-muted); display: flex; flex-direction: column; align-items: center; gap: 12px;}
+        .empty-state .material-symbols-rounded { font-size: 3rem; color: var(--surface-high); font-variation-settings: 'FILL' 1;}
+    </style>
+</head>
+<body class="locked">
+
+<div id="loader-screen">
+    <div class="loader-spinner"></div>
+</div>
+
+<!-- PREMIUM PIN LOCK SCREEN -->
+<div id="lock-screen" class="hidden">
+    <span class="material-symbols-rounded lock-icon">account_balance_wallet</span>
+    <div class="lock-title" id="lock-prompt-text">Enter PIN</div>
+    <div class="pin-dots-container" id="pin-dots">
+        <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+    </div>
+    <div class="pin-pad">
+        <button class="pin-btn" onclick="pressPin('1')">1</button><button class="pin-btn" onclick="pressPin('2')">2</button><button class="pin-btn" onclick="pressPin('3')">3</button>
+        <button class="pin-btn" onclick="pressPin('4')">4</button><button class="pin-btn" onclick="pressPin('5')">5</button><button class="pin-btn" onclick="pressPin('6')">6</button>
+        <button class="pin-btn" onclick="pressPin('7')">7</button><button class="pin-btn" onclick="pressPin('8')">8</button><button class="pin-btn" onclick="pressPin('9')">9</button>
+        <button class="pin-btn empty"></button><button class="pin-btn" onclick="pressPin('0')">0</button><button class="pin-btn" onclick="pressPin('back')" style="border:none;"><span class="material-symbols-rounded" style="color:var(--text-muted);">backspace</span></button>
+    </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- Goal Fund Modal -->
+<div id="goal-modal" class="modal-overlay">
+    <div class="modal-content card">
+        <h2 id="modal-goal-name" style="margin-top: 0; font-size: 1.4rem; font-weight: 700;">Add to Goal</h2>
+        <div class="segmented-control" style="margin-top: 16px; margin-bottom: 24px;">
+            <input type="radio" id="sav-upi" name="sav-account" value="upi" checked>
+            <label for="sav-upi" class="segment-btn" onclick="triggerHaptic(10)">UPI</label>
+            <input type="radio" id="sav-cash" name="sav-account" value="cash">
+            <label for="sav-cash" class="segment-btn" onclick="triggerHaptic(10)">Cash</label>
+        </div>
+        <div class="hero-amount-wrapper" style="margin-bottom: 0; padding: 16px;">
+            <div class="hero-amount-inner">
+                <span class="currency-symbol">₹</span>
+                <input type="number" id="modal-amount" placeholder="0" inputmode="decimal" step="any" class="massive-input">
+            </div>
+        </div>
+        <div style="display: flex; gap: 12px; margin-top: 24px;">
+            <button class="primary-btn" style="margin-top: 0; background: var(--surface-high); color: var(--text-main);" onclick="closeGoalModal()">Cancel</button>
+            <button class="primary-btn" style="margin-top: 0;" onclick="submitGoalFunds()">Add Funds</button>
+        </div>
+    </div>
+</div>
+
+<!-- Wishlist BUY Modal -->
+<div id="buy-modal" class="modal-overlay">
+    <div class="modal-content card">
+        <h2 id="modal-buy-name" style="margin-top: 0; font-size: 1.4rem; font-weight: 700;">Buy Item</h2>
+        <p id="buy-amount" class="mono" style="font-size: 1.4rem; font-weight: 700; color: var(--primary); margin-top: 4px; margin-bottom: 24px;">₹0</p>
+        
+        <div class="segmented-control" style="margin-bottom: 24px;">
+            <input type="radio" id="buy-upi" name="buy-account" value="upi" checked>
+            <label for="buy-upi" class="segment-btn" onclick="triggerHaptic(10)">UPI</label>
+            <input type="radio" id="buy-cash" name="buy-account" value="cash">
+            <label for="buy-cash" class="segment-btn" onclick="triggerHaptic(10)">Cash</label>
+        </div>
+        
+        <label class="section-subtitle">Expense Category</label>
+        <select id="buy-category" style="margin-bottom: 32px;">
+            <option value="Shopping & Tech">Shopping & Tech</option>
+            <option value="Miscellaneous">Miscellaneous</option>
+            <option value="Transport">Transport</option>
+            <option value="Books & Academics">Books & Academics</option>
+        </select>
+        
+        <div style="display: flex; gap: 12px;">
+            <button class="primary-btn" style="margin-top: 0; background: var(--surface-high); color: var(--text-main);" onclick="closeBuyModal()">Cancel</button>
+            <button class="primary-btn" style="margin-top: 0;" onclick="submitBuyItem()">Confirm Buy</button>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+    <header id="main-header">
+        <div class="header-text">
+            <h2 id="greeting-text">Good Day</h2>
+            <p>Your financial overview</p>
+        </div>
+        <div class="header-actions">
+            <div id="undo-redo-group" style="display: flex; gap: 8px;">
+                <button class="action-btn" id="btn-undo" onclick="undoAction()" disabled><span class="material-symbols-rounded">undo</span></button>
+                <button class="action-btn" id="btn-redo" onclick="redoAction()" disabled><span class="material-symbols-rounded">redo</span></button>
+            </div>
+        </div>
+    </header>
+
+    <!-- TAB 1: DASHBOARD -->
+    <div id="tab-dashboard" class="tab-content active slide-right">
+        <div class="hero-balance-card" id="hero-card">
+            <span class="hero-label">Total Net Worth</span>
+            <h1 class="hero-amount mono"><span class="hero-currency">₹</span><span id="total-bal">0.00</span></h1>
+            <div class="wallet-pills-container">
+                <div class="wallet-pill"><span class="material-symbols-rounded">account_balance</span> <span class="mono" id="upi-bal">0.00</span></div>
+                <div class="wallet-pill"><span class="material-symbols-rounded">payments</span> <span class="mono" id="cash-bal">0.00</span></div>
+            </div>
+        </div>
+
+        <div class="goals-carousel-wrapper" id="dashboard-goals-wrapper">
+            <div class="section-header"><h3>Active Goals & Budgets</h3></div>
+            <div id="goals-list-dashboard" class="goals-carousel"></div>
+        </div>
+
+        <div class="section-header" style="margin-top: 24px;"><h3>Recent Activity</h3><span class="section-subtitle" style="margin:0;">Swipe to delete</span></div>
+        <div id="history-list"></div>
+    </div>
+
+    <!-- TAB 2: UNIFIED LOG (EXPENSE & INCOME) -->
+    <div id="tab-log" class="tab-content">
+        <div class="segmented-control log-toggle" style="margin-top: 16px;">
+            <input type="radio" id="log-exp" name="log-type" value="expense" checked onchange="toggleLogType('expense')">
+            <label for="log-exp" class="segment-btn" onclick="triggerHaptic(10)">Expense</label>
+            <input type="radio" id="log-inc" name="log-type" value="income" onchange="toggleLogType('income')">
+            <label for="log-inc" class="segment-btn" onclick="triggerHaptic(10)">Income</label>
+        </div>
+        
+        <div class="segmented-control" style="margin-bottom: 16px;">
+            <input type="radio" id="log-upi" name="log-account" value="upi" checked>
+            <label for="log-upi" class="segment-btn" onclick="triggerHaptic(10)">UPI Wallet</label>
+            <input type="radio" id="log-cash" name="log-account" value="cash">
+            <label for="log-cash" class="segment-btn" onclick="triggerHaptic(10)">Cash Wallet</label>
+        </div>
+
+        <div class="hero-amount-wrapper">
+            <div class="hero-amount-inner">
+                <span class="currency-symbol">₹</span>
+                <input type="number" id="log-amount" placeholder="0" inputmode="decimal" step="any" class="massive-input">
+            </div>
+        </div>
+        
+        <!-- Expense Categories -->
+        <div id="log-exp-categories">
+            <div class="category-grid" id="exp-cat-grid">
+                <div class="cat-box active-cat exp-cat" onclick="selectLogCategory(this, 'Food & Canteen', 'expense')"><span class="material-symbols-rounded">restaurant</span><span class="cat-label">Food</span></div>
+                <div class="cat-box" onclick="selectLogCategory(this, 'Groceries', 'expense')"><span class="material-symbols-rounded">shopping_cart</span><span class="cat-label">Grocery</span></div>
+                <div class="cat-box" onclick="selectLogCategory(this, 'Transport', 'expense')"><span class="material-symbols-rounded">local_taxi</span><span class="cat-label">Travel</span></div>
+                <div class="cat-box" onclick="selectLogCategory(this, 'Books & Academics', 'expense')"><span class="material-symbols-rounded">menu_book</span><span class="cat-label">Study</span></div>
+                <div class="cat-box" onclick="selectLogCategory(this, 'Bills & Utilities', 'expense')"><span class="material-symbols-rounded">receipt_long</span><span class="cat-label">Bills</span></div>
+                <div class="cat-box" onclick="selectLogCategory(this, 'Shopping & Tech', 'expense')"><span class="material-symbols-rounded">devices</span><span class="cat-label">Tech</span></div>
+                <div class="cat-box" onclick="selectLogCategory(this, 'Subscriptions', 'expense')"><span class="material-symbols-rounded">play_circle</span><span class="cat-label">Subs</span></div>
+                <div class="cat-box" onclick="selectLogCategory(this, 'Miscellaneous', 'expense')"><span class="material-symbols-rounded">more_horiz</span><span class="cat-label">Misc</span></div>
+            </div>
+        </div>
+        
+        <!-- Income Categories (Hidden by default) -->
+        <div id="log-inc-categories" style="display: none;">
+            <div class="category-grid" id="inc-cat-grid" style="grid-template-columns: repeat(3, 1fr);">
+                <div class="cat-box active-cat inc-cat" onclick="selectLogCategory(this, 'Pocket Money / Allowance', 'income')"><span class="material-symbols-rounded">savings</span><span class="cat-label">Allowance</span></div>
+                <div class="cat-box" onclick="selectLogCategory(this, 'Salary', 'income')"><span class="material-symbols-rounded">payments</span><span class="cat-label">Salary</span></div>
+                <div class="cat-box" onclick="selectLogCategory(this, 'Freelance / Photography', 'income')"><span class="material-symbols-rounded">photo_camera</span><span class="cat-label">Freelance</span></div>
+                <div class="cat-box" onclick="selectLogCategory(this, 'Gifts', 'income')"><span class="material-symbols-rounded">featured_seasonal_and_gifts</span><span class="cat-label">Gift</span></div>
+                <div class="cat-box" onclick="selectLogCategory(this, 'Refund', 'income')"><span class="material-symbols-rounded">keyboard_return</span><span class="cat-label">Refund</span></div>
+                <div class="cat-box" onclick="selectLogCategory(this, 'Other', 'income')"><span class="material-symbols-rounded">category</span><span class="cat-label">Other</span></div>
+            </div>
+        </div>
+
+        <div class="icon-input-wrapper">
+            <span class="material-symbols-rounded">edit_note</span>
+            <input type="text" id="log-note" placeholder="Add a note (e.g., Dinner #Goa)...">
+        </div>
+        
+        <button class="primary-btn btn-expense" id="log-submit-btn" onclick="submitUnifiedTransaction()">Deduct Expense</button>
+    </div>
+
+    <!-- TAB 3: SAVINGS / GOALS -->
+    <div id="tab-savings" class="tab-content">
+        <div class="segmented-control" style="margin-top: 16px;">
+            <input type="radio" id="mode-goal" name="savings-mode" value="goal" checked onchange="toggleSavingsMode('goal')">
+            <label for="mode-goal" class="segment-btn" onclick="triggerHaptic(10)">New Goal</label>
+            <input type="radio" id="mode-budget" name="savings-mode" value="budget" onchange="toggleSavingsMode('budget')">
+            <label for="mode-budget" class="segment-btn" onclick="triggerHaptic(10)">Set Budget</label>
+        </div>
+
+        <div id="form-goal-wrapper">
+            <div class="hero-amount-wrapper">
+                <div class="hero-amount-inner">
+                    <span class="currency-symbol">₹</span>
+                    <input type="number" id="new-goal-target" placeholder="0" inputmode="decimal" class="massive-input">
+                </div>
+            </div>
+            <div class="icon-input-wrapper">
+                <span class="material-symbols-rounded">flag</span>
+                <input type="text" id="new-goal-name" placeholder="Goal Name (e.g., Trip to Goa)">
+            </div>
+            <div class="icon-input-wrapper" style="margin-bottom: 0;">
+                <span class="material-symbols-rounded">event</span>
+                <input type="date" id="new-goal-date" placeholder="Deadline (Optional)">
+            </div>
+            <button class="primary-btn" onclick="createNewGoal()"><span class="material-symbols-rounded">add_task</span> Create Goal</button>
+        </div>
+
+        <div id="form-budget-wrapper" style="display: none;">
+            <div class="hero-amount-wrapper">
+                <div class="hero-amount-inner">
+                    <span class="currency-symbol">₹</span>
+                    <input type="number" id="budget-limit" placeholder="0" inputmode="decimal" class="massive-input">
+                </div>
+            </div>
+            <div class="category-grid" id="budget-cat-grid" style="grid-template-columns: repeat(4, 1fr);">
+                <div class="cat-box active-cat neu-cat" onclick="selectBudgetCategory(this, 'Food & Canteen')"><span class="material-symbols-rounded">restaurant</span><span class="cat-label">Food</span></div>
+                <div class="cat-box" onclick="selectBudgetCategory(this, 'Groceries')"><span class="material-symbols-rounded">shopping_cart</span><span class="cat-label">Grocery</span></div>
+                <div class="cat-box" onclick="selectBudgetCategory(this, 'Transport')"><span class="material-symbols-rounded">local_taxi</span><span class="cat-label">Travel</span></div>
+                <div class="cat-box" onclick="selectBudgetCategory(this, 'Books & Academics')"><span class="material-symbols-rounded">menu_book</span><span class="cat-label">Study</span></div>
+                <div class="cat-box" onclick="selectBudgetCategory(this, 'Bills & Utilities')"><span class="material-symbols-rounded">receipt_long</span><span class="cat-label">Bills</span></div>
+                <div class="cat-box" onclick="selectBudgetCategory(this, 'Shopping & Tech')"><span class="material-symbols-rounded">devices</span><span class="cat-label">Tech</span></div>
+                <div class="cat-box" onclick="selectBudgetCategory(this, 'Subscriptions')"><span class="material-symbols-rounded">play_circle</span><span class="cat-label">Subs</span></div>
+                <div class="cat-box" onclick="selectBudgetCategory(this, 'Miscellaneous')"><span class="material-symbols-rounded">more_horiz</span><span class="cat-label">Misc</span></div>
+            </div>
+            <button class="primary-btn" onclick="setBudget()"><span class="material-symbols-rounded">account_balance_wallet</span> Set Budget Limit</button>
+        </div>
+        
+        <div class="section-header" style="margin-top: 32px;" id="manage-savings-wrapper"><h3>Manage Plans</h3><span class="section-subtitle" style="margin:0;">Swipe to delete</span></div>
+        <div id="manage-savings-list"></div>
+    </div>
+
+    <!-- TAB 4: INSIGHTS & CHARTS -->
+    <div id="tab-insights" class="tab-content">
+        <div class="card" style="margin-top: 16px;">
+            <div class="section-header" style="margin:0;"><h3>Monthly Breakdown</h3></div>
+            <div class="chart-container" style="height:220px;"><canvas id="expenseChart"></canvas></div>
+            <div id="no-chart-data" class="empty-state" style="display: none;">
+                <span class="material-symbols-rounded">donut_large</span>
+                <span>No expenses logged this month.</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="section-header" style="margin:0;"><h3>Yearly Cashflow</h3></div>
+            <div class="chart-container" style="height: 200px;"><canvas id="recapChart"></canvas></div>
+            <div id="recap-summary" style="display: flex; justify-content: space-between; font-weight: 600; font-size: 0.95rem; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--surface-high);"></div>
+        </div>
+
+        <!-- TRIP DASHBOARD -->
+        <div class="section-header" style="margin-top: 24px;"><h3>Trip & Event Analysis</h3></div>
+        <select id="tag-selector" onchange="showTagData()" style="margin-bottom: 16px;"></select>
+        
+        <div id="trip-dashboard-wrapper" style="display:none; transition: opacity 0.4s ease;">
+            <div class="card" style="background: linear-gradient(180deg, #1A1C1E, #111111); border-color: var(--primary);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3 id="trip-dashboard-title" style="margin:0; font-size: 1.2rem; font-weight: 700; color: #FFF;">Trip Summary</h3>
+                    <button class="action-btn" onclick="shareTrip()" style="padding: 8px; width:36px; height:36px;"><span class="material-symbols-rounded" style="font-size: 1.1rem;">ios_share</span></button>
+                </div>
+                <div class="iou-summary-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px;">
+                    <div style="background:var(--bg); border-radius: 16px; padding: 12px; text-align:center; border: 1px solid var(--surface-high);"><div style="font-size:0.75rem; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Funded</div><div class="mono text-income" id="trip-inc-val" style="font-size: 1.2rem; font-weight:700;">₹0</div></div>
+                    <div style="background:var(--bg); border-radius: 16px; padding: 12px; text-align:center; border: 1px solid var(--surface-high);"><div style="font-size:0.75rem; color:var(--text-muted); font-weight:600; text-transform:uppercase;">Spent</div><div class="mono text-expense" id="trip-exp-val" style="font-size: 1.2rem; font-weight:700;">₹0</div></div>
+                </div>
+                <div class="chart-container" style="height: 180px; margin-top: 0;"><canvas id="tripChart"></canvas></div>
+                <div id="no-trip-chart-data" class="empty-state" style="display:none;"><span class="material-symbols-rounded">flight_takeoff</span><span>No trip expenses found.</span></div>
+            </div>
+            <div id="tag-container" style="margin-bottom: 24px;"></div>
+        </div>
+
+        <div class="section-header" style="margin-top: 24px;"><h3>Time Machine</h3></div>
+        <select id="archive-selector" onchange="showArchivedData()" style="margin-bottom: 16px;"></select>
+        <div id="archive-container"></div>
+    </div>
+
+    <!-- TAB 5: MORE MENU -->
+    <div id="tab-more" class="tab-content">
+        <div id="more-main-menu">
+            <h2 style="font-size: 1.6rem; font-weight: 700; margin: 16px 0 24px 0;">More Options</h2>
+            <div class="more-grid">
+                <button class="more-card" onclick="openSubView('sub-iou')"><span class="material-symbols-rounded">handshake</span><span class="more-card-title">IOU Tracker</span></button>
+                <button class="more-card" onclick="openSubView('sub-radar')"><span class="material-symbols-rounded">radar</span><span class="more-card-title">Wishlist</span></button>
+                <button class="more-card settings-card" style="grid-column: span 2; flex-direction: row; justify-content: flex-start; padding: 20px;" onclick="openSubView('sub-settings')">
+                    <span class="material-symbols-rounded">settings</span><span class="more-card-title">App Settings & Backup</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- SUB-VIEWS (Hidden by default, overlaid inside the More tab) -->
+        <div id="sub-iou" style="display: none; animation: fadeForward 0.3s forwards;">
+            <div class="sub-header">
+                <button class="back-btn" onclick="closeSubView('sub-iou')"><span class="material-symbols-rounded">arrow_back</span></button>
+                <h2>IOU Tracker</h2>
+            </div>
+            <div class="segmented-control">
+                <input type="radio" id="iou-lent" name="iou-type" value="lent" checked>
+                <label for="iou-lent" class="segment-btn" onclick="triggerHaptic(10)">They Owe Me</label>
+                <input type="radio" id="iou-borrowed" name="iou-type" value="borrowed">
+                <label for="iou-borrowed" class="segment-btn" onclick="triggerHaptic(10)">I Owe Them</label>
+            </div>
+            <div class="hero-amount-wrapper">
+                <div class="hero-amount-inner">
+                    <span class="currency-symbol">₹</span>
+                    <input type="number" id="iou-amount" placeholder="0" inputmode="decimal" step="any" class="massive-input">
+                </div>
+            </div>
+            <div class="icon-input-wrapper">
+                <span class="material-symbols-rounded">person</span>
+                <input type="text" id="iou-person" placeholder="Person's Name">
+            </div>
+            <div id="payee-chips" class="contact-scroll"></div>
+            <button class="primary-btn" onclick="addIOU()"><span class="material-symbols-rounded">handshake</span> Save Record</button>
+            
+            <div class="section-header" style="margin-top: 32px;"><h3>Active Debts</h3><span class="section-subtitle" style="margin:0;">Swipe to settle</span></div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                <div class="card" style="padding: 16px; margin:0; text-align:center;"><div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase;">Owed to you</div><div class="mono text-income" id="iou-total-lent" style="font-size: 1.4rem; font-weight: 700;">₹0</div></div>
+                <div class="card" style="padding: 16px; margin:0; text-align:center;"><div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase;">You owe</div><div class="mono text-expense" id="iou-total-borrowed" style="font-size: 1.4rem; font-weight: 700;">₹0</div></div>
+            </div>
+            <div id="iou-list"></div>
+        </div>
+
+        <div id="sub-radar" style="display: none; animation: fadeForward 0.3s forwards;">
+            <div class="sub-header">
+                <button class="back-btn" onclick="closeSubView('sub-radar')"><span class="material-symbols-rounded">arrow_back</span></button>
+                <h2>Wishlist Radar</h2>
+            </div>
+            <div class="hero-amount-wrapper">
+                <div class="hero-amount-inner">
+                    <span class="currency-symbol">₹</span>
+                    <input type="number" id="radar-price" placeholder="0" inputmode="decimal" class="massive-input">
+                </div>
+            </div>
+            <div class="icon-input-wrapper">
+                <span class="material-symbols-rounded">shopping_bag</span>
+                <input type="text" id="radar-name" placeholder="Item Name (e.g., PS5)">
+            </div>
+            <div class="icon-input-wrapper">
+                <span class="material-symbols-rounded">link</span>
+                <input type="text" id="radar-link" placeholder="Product Link (Optional)">
+            </div>
+            <label class="section-subtitle" style="margin-top: 16px;">Priority Level</label>
+            <div class="segmented-control" style="margin-bottom: 16px; margin-top: 8px;">
+                <input type="radio" id="rad-high" name="radar-priority" value="High" checked>
+                <label for="rad-high" class="segment-btn" onclick="triggerHaptic(10)">High</label>
+                <input type="radio" id="rad-med" name="radar-priority" value="Med">
+                <label for="rad-med" class="segment-btn" onclick="triggerHaptic(10)">Med</label>
+                <input type="radio" id="rad-low" name="radar-priority" value="Low">
+                <label for="rad-low" class="segment-btn" onclick="triggerHaptic(10)">Low</label>
+            </div>
+            <button class="primary-btn" onclick="addWishlist()"><span class="material-symbols-rounded">radar</span> Add to Radar</button>
+            
+            <div class="section-header" style="margin-top: 32px;"><h3>My Targets</h3></div>
+            <div id="wishlist-container"></div>
+        </div>
+
+        <div id="sub-settings" style="display: none; animation: fadeForward 0.3s forwards;">
+            <div class="sub-header">
+                <button class="back-btn" onclick="closeSubView('sub-settings')"><span class="material-symbols-rounded">arrow_back</span></button>
+                <h2>Settings</h2>
+            </div>
+            <div class="settings-card">
+                <div class="settings-item">
+                    <span class="material-symbols-rounded settings-icon" style="color: var(--primary);">lock</span>
+                    <div class="settings-text"><span class="settings-title">App Lock (PIN)</span><span class="settings-desc" id="lock-desc-text">Require PIN on startup</span></div>
+                    <label class="switch"><input type="checkbox" id="pin-toggle" onchange="togglePinLock()"><span class="slider"></span></label>
+                </div>
+            </div>
+            <div class="section-header"><h3>Data & Backup</h3></div>
+            <div class="settings-card">
+                <div class="settings-item" onclick="exportData()">
+                    <span class="material-symbols-rounded settings-icon">data_object</span>
+                    <div class="settings-text"><span class="settings-title">Backup JSON</span><span class="settings-desc">Save a raw data file</span></div>
+                    <span class="material-symbols-rounded chevron">chevron_right</span>
+                </div>
+                <div class="settings-divider"></div>
+                <div class="settings-item" onclick="exportCSV()">
+                    <span class="material-symbols-rounded settings-icon">table_view</span>
+                    <div class="settings-text"><span class="settings-title">Export CSV</span><span class="settings-desc">Download as a spreadsheet</span></div>
+                    <span class="material-symbols-rounded chevron">chevron_right</span>
+                </div>
+            </div>
+            <div class="section-header"><h3>System</h3></div>
+            <div class="settings-card">
+                <div class="settings-item" onclick="forceAppUpdate()">
+                    <span class="material-symbols-rounded settings-icon">system_update</span>
+                    <div class="settings-text"><span class="settings-title">Check for Updates</span><span class="settings-desc">Pull latest code from server</span></div>
+                    <span class="material-symbols-rounded chevron">chevron_right</span>
+                </div>
+                <div class="settings-divider"></div>
+                <div class="settings-item" onclick="clearData()">
+                    <span class="material-symbols-rounded settings-icon" style="color: var(--expense);">delete_forever</span>
+                    <div class="settings-text"><span class="settings-title" style="color: var(--expense);">Erase All Data</span><span class="settings-desc">Permanent local wipe</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 5-Item Bottom Navigation -->
+<nav class="bottom-nav">
+    <button class="nav-item active" onclick="switchTab('dashboard', this)" id="nav-dashboard">
+        <div class="nav-icon-wrapper"><span class="material-symbols-rounded nav-icon">home</span></div><span class="nav-text">Home</span>
+    </button>
+    <button class="nav-item" onclick="switchTab('log', this)" id="nav-log">
+        <div class="nav-icon-wrapper"><span class="material-symbols-rounded nav-icon">add_circle</span></div><span class="nav-text">Log</span>
+    </button>
+    <button class="nav-item" onclick="switchTab('savings', this)" id="nav-savings">
+        <div class="nav-icon-wrapper"><span class="material-symbols-rounded nav-icon">track_changes</span></div><span class="nav-text">Goals</span>
+    </button>
+    <button class="nav-item" onclick="switchTab('insights', this)" id="nav-insights">
+        <div class="nav-icon-wrapper"><span class="material-symbols-rounded nav-icon">donut_small</span></div><span class="nav-text">Stats</span>
+    </button>
+    <button class="nav-item" onclick="switchTab('more', this)" id="nav-more">
+        <div class="nav-icon-wrapper"><span class="material-symbols-rounded nav-icon">menu</span></div><span class="nav-text">More</span>
+    </button>
+</nav>
+
+<script>
+    if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(err => console.log('SW failed')); }); }
+    
+    // --- PIN LOCK LOGIC ---
+    let savedAppPIN = localStorage.getItem('appPIN');
+    let isAppLocked = !!savedAppPIN;
+    let pinInputSequence = "";
+    let isSettingNewPIN = false;
+    let tempNewPIN = "";
+
+    window.addEventListener('load', () => { 
+        if (isAppLocked) {
+            setTimeout(() => { document.getElementById('loader-screen').classList.add('hidden'); }, 300);
+            document.getElementById('lock-screen').classList.remove('hidden');
+            document.getElementById('pin-toggle').checked = true;
+            document.getElementById('lock-desc-text').innerText = "PIN protection is active";
+        } else {
+            setTimeout(() => { 
+                document.getElementById('loader-screen').classList.add('hidden'); 
+                document.body.classList.remove('locked');
+            }, 600);
+        }
+    });
+
+    function pressPin(val) {
+        triggerHaptic(15);
+        if (val === 'back') {
+            if (pinInputSequence.length > 0) {
+                pinInputSequence = pinInputSequence.slice(0, -1);
+                updatePinDots();
+            }
+            return;
+        }
+        
+        if (pinInputSequence.length < 4) {
+            pinInputSequence += val;
+            updatePinDots();
+            
+            if (pinInputSequence.length === 4) {
+                setTimeout(processCompletePin, 100); 
+            }
+        }
+    }
+
+    function updatePinDots() {
+        const dots = document.querySelectorAll('.pin-dot');
+        dots.forEach((dot, index) => {
+            if (index < pinInputSequence.length) {
+                dot.classList.add('filled');
+            } else {
+                dot.classList.remove('filled');
+                dot.classList.remove('error'); 
+            }
+        });
+    }
+
+    function processCompletePin() {
+        if (isSettingNewPIN) {
+            if (tempNewPIN === "") {
+                tempNewPIN = pinInputSequence;
+                pinInputSequence = "";
+                updatePinDots();
+                document.getElementById('lock-prompt-text').innerText = "Confirm New PIN";
+                triggerHaptic(20);
+            } else {
+                if (pinInputSequence === tempNewPIN) {
+                    localStorage.setItem('appPIN', tempNewPIN);
+                    savedAppPIN = tempNewPIN;
+                    isAppLocked = true;
+                    showToast("PIN Lock Enabled");
+                    triggerHaptic([40, 60, 40]);
+                    exitLockScreen();
+                } else {
+                    triggerPinError();
+                    document.getElementById('lock-prompt-text').innerText = "PINs did not match. Try again.";
+                    tempNewPIN = "";
+                }
+            }
+        } else {
+            if (pinInputSequence === savedAppPIN) {
+                triggerHaptic([20, 30, 20]);
+                exitLockScreen();
+            } else {
+                triggerPinError();
+                document.getElementById('lock-prompt-text').innerText = "Incorrect PIN";
+            }
+        }
+    }
+
+    function triggerPinError() {
+        triggerHaptic([50, 50, 50, 50]);
+        const dotsContainer = document.getElementById('pin-dots');
+        dotsContainer.classList.add('shake-animation');
+        document.querySelectorAll('.pin-dot').forEach(dot => dot.classList.add('error'));
+        
+        setTimeout(() => {
+            dotsContainer.classList.remove('shake-animation');
+            pinInputSequence = "";
+            updatePinDots();
+        }, 400);
+    }
+
+    function exitLockScreen() {
+        document.getElementById('lock-screen').classList.add('hidden');
+        document.body.classList.remove('locked');
+        pinInputSequence = "";
+        tempNewPIN = "";
+        isSettingNewPIN = false;
+        setTimeout(updatePinDots, 500); 
+    }
+
+    function togglePinLock() {
+        triggerHaptic(20);
+        const toggle = document.getElementById('pin-toggle');
+        if (toggle.checked) {
+            isSettingNewPIN = true;
+            tempNewPIN = "";
+            pinInputSequence = "";
+            updatePinDots();
+            document.getElementById('lock-prompt-text').innerText = "Create a 4-Digit PIN";
+            document.getElementById('lock-screen').classList.remove('hidden');
+            document.body.classList.add('locked');
+            document.getElementById('lock-desc-text').innerText = "PIN protection is active";
+        } else {
+            if(confirm("Disable PIN protection? Anyone with your device will be able to open the app.")) {
+                localStorage.removeItem('appPIN');
+                savedAppPIN = null;
+                isAppLocked = false;
+                document.getElementById('lock-desc-text').innerText = "Require PIN on startup";
+                showToast("PIN Lock Disabled");
+            } else {
+                toggle.checked = true; 
+            }
+        }
+    }
+
+    // --- MAIN APP STATE ---
+    let myChart = null;
+    let recapChart = null;
+    let tripChart = null;
+    
+    let data = { upi: 0, cash: 0, savings: 0, history: [], ious: [], currentMonth: new Date().toISOString().slice(0, 7), archives: {}, goals: [], budgets: {}, recentPayees: ['Ganesh', 'Meghraj', 'Yusuf'], wishlist: [], rollovers: {} };
+    try { const storedData = localStorage.getItem('financeData'); if (storedData) data = { ...data, ...JSON.parse(storedData) }; } catch(e) {}
+    
+    // Safety Fallbacks
+    if (!Array.isArray(data.history)) data.history = []; if (!Array.isArray(data.ious)) data.ious = []; if (!Array.isArray(data.goals)) data.goals = []; if (!data.archives) data.archives = {}; if (!data.budgets) data.budgets = {}; if (!Array.isArray(data.recentPayees)) data.recentPayees = ['Ganesh', 'Meghraj', 'Yusuf'];
+    if (!Array.isArray(data.wishlist)) data.wishlist = []; if (!data.rollovers) data.rollovers = {};
+
+    let undoStack = []; let redoStack = [];
+    let currentGoalIndex = null; 
+    let currentBuyIndex = null;
+    let isAnimating = false; 
+
+    // Icon Mapping Dictionary
+    const categoryIcons = {
+        'Food & Canteen': 'restaurant', 'Groceries': 'shopping_cart', 'Transport': 'local_taxi', 
+        'Books & Academics': 'menu_book', 'Bills & Utilities': 'receipt_long', 'Shopping & Tech': 'devices', 
+        'Subscriptions': 'play_circle', 'Miscellaneous': 'more_horiz', 'Pocket Money / Allowance': 'savings', 
+        'Salary': 'payments', 'Freelance / Photography': 'photo_camera', 'Gifts': 'featured_seasonal_and_gifts', 
+        'Refund': 'keyboard_return', 'Other': 'category'
+    };
+    function getCatIcon(catStr) { const base = catStr.split(' (')[0]; return categoryIcons[base] || 'category'; }
+
+    function updateGreeting() {
+        const hour = new Date().getHours();
+        let greeting = 'Good Evening';
+        if (hour >= 5 && hour < 12) greeting = 'Good Morning';
+        else if (hour >= 12 && hour < 17) greeting = 'Good Afternoon';
+        document.getElementById('greeting-text').innerText = greeting;
+    }
+    updateGreeting();
+
+    let activeLogType = 'expense';
+    let activeExpCat = 'Food & Canteen';
+    let activeIncCat = 'Pocket Money / Allowance';
+    let activeBudgetCat = 'Food & Canteen';
+
+    function toggleLogType(type) {
+        triggerHaptic(10);
+        activeLogType = type;
+        const btn = document.getElementById('log-submit-btn');
+        if (type === 'expense') {
+            document.getElementById('log-exp-categories').style.display = 'block';
+            document.getElementById('log-inc-categories').style.display = 'none';
+            btn.className = 'primary-btn btn-expense';
+            btn.innerText = 'Deduct Expense';
+        } else {
+            document.getElementById('log-exp-categories').style.display = 'none';
+            document.getElementById('log-inc-categories').style.display = 'block';
+            btn.className = 'primary-btn btn-income';
+            btn.innerText = 'Add Income';
+        }
+    }
+
+    function selectLogCategory(el, catName, type) { 
+        triggerHaptic(10); 
+        if (type === 'expense') {
+            document.querySelectorAll('#exp-cat-grid .cat-box').forEach(box => box.classList.remove('active-cat')); 
+            activeExpCat = catName; 
+        } else {
+            document.querySelectorAll('#inc-cat-grid .cat-box').forEach(box => box.classList.remove('active-cat')); 
+            activeIncCat = catName;
+        }
+        el.classList.add('active-cat'); 
+    }
+
+    function selectBudgetCategory(el, catName) { 
+        triggerHaptic(10); 
+        document.querySelectorAll('#budget-cat-grid .cat-box').forEach(box => box.classList.remove('active-cat')); 
+        el.classList.add('active-cat'); activeBudgetCat = catName; 
+    }
+
+    function toggleSavingsMode(mode) {
+        triggerHaptic(10);
+        const goalForm = document.getElementById('form-goal-wrapper');
+        const budgetForm = document.getElementById('form-budget-wrapper');
+        if(mode === 'goal') { goalForm.style.display = 'block'; budgetForm.style.display = 'none'; }
+        else { goalForm.style.display = 'none'; budgetForm.style.display = 'block'; }
+    }
+
+    function submitUnifiedTransaction() {
+        triggerHaptic(25); checkMonthlyReset(); 
+        const type = activeLogType;
+        const accountStr = document.querySelector('input[name="log-account"]:checked').value;
+        const amountStr = document.getElementById('log-amount').value;
+        const noteStr = document.getElementById('log-note').value.trim();
+        const baseCategory = type === 'expense' ? activeExpCat : activeIncCat;
+        
+        const amount = parseFloat(amountStr); 
+        if (isNaN(amount) || amount <= 0) return showToast("Enter a valid amount.");
+        const finalCategoryStr = noteStr ? `${baseCategory} (${noteStr})` : baseCategory;
+
+        saveState(); 
+        if (type === 'income') { data[accountStr] = (parseFloat(data[accountStr]) || 0) + amount; } 
+        else if (type === 'expense') { data[accountStr] = (parseFloat(data[accountStr]) || 0) - amount; } 
+        
+        data.history.push({ type: type, account: accountStr, amount: amount, category: finalCategoryStr, date: new Date().toLocaleDateString() });
+        document.getElementById('log-amount').value = ''; document.getElementById('log-note').value = '';
+        updateUI(); switchTab('dashboard'); showToast("Transaction Logged");
+    }
+
+    let touchStartX = 0; let lastTouchX = 0; let lastTouchTime = 0; let velocity = 0;
+    let activeSwipeElement = null; let activeActionContainer = null; let thresholdCrossed = false; let startBaseX = 0; 
+    const MAX_SWIPE = 80;
+    
+    function closeAllSwiped() {
+        document.querySelectorAll('.swipe-content.swiped').forEach(el => {
+            el.classList.remove('swiped'); el.style.transition = 'transform 0.5s var(--spring-bounce)'; el.style.transform = `translateX(0px)`;
+            let icon = el.parentElement.querySelector('.swipe-action-icon');
+            if(icon) { icon.style.transition = 'transform 0.4s ease, opacity 0.3s'; icon.style.transform = 'scale(0.5)'; icon.style.opacity = '0'; }
+        });
+    }
+
+    document.addEventListener('touchstart', (e) => {
+        if(isAnimating) return;
+        const swipeAction = e.target.closest('.swipe-action-delete, .swipe-action-settle'); if (swipeAction) return; 
+        const swipeContent = e.target.closest('.swipe-content');
+        if (!swipeContent) { closeAllSwiped(); return; }
+        const currentlySwiped = document.querySelector('.swipe-content.swiped');
+        if (currentlySwiped && currentlySwiped !== swipeContent) { closeAllSwiped(); return; }
+        
+        touchStartX = e.touches[0].clientX; lastTouchX = touchStartX; lastTouchTime = Date.now(); velocity = 0; thresholdCrossed = false;
+        activeSwipeElement = swipeContent; startBaseX = activeSwipeElement.classList.contains('swiped') ? -MAX_SWIPE : 0;
+        activeSwipeElement.classList.add('dragging'); activeActionContainer = activeSwipeElement.parentElement;
+    }, {passive: true});
+
+    document.addEventListener('touchmove', (e) => {
+        if (!activeSwipeElement || isAnimating) return; 
+        const currentX = e.touches[0].clientX; const currentTime = Date.now();
+        if (currentTime > lastTouchTime) { velocity = (currentX - lastTouchX) / (currentTime - lastTouchTime); }
+        lastTouchX = currentX; lastTouchTime = currentTime;
+
+        let deltaX = currentX - touchStartX; let displacement = startBaseX + deltaX;
+        if (displacement > 0) { displacement = 0 + (15 * Math.log10(1 + displacement / 15)); }
+        if (displacement < -MAX_SWIPE) { const excess = Math.abs(displacement) - MAX_SWIPE; displacement = -MAX_SWIPE - (20 * Math.log10(1 + excess / 20)); }
+        
+        activeSwipeElement.style.transform = `translateX(${displacement}px)`;
+        let icon = activeActionContainer.querySelector('.swipe-action-icon');
+        if (icon) { let progress = Math.min(Math.abs(displacement) / MAX_SWIPE, 1); icon.style.transform = `scale(${0.5 + (0.5 * progress)})`; icon.style.opacity = `${progress}`; }
+
+        if (displacement <= -40 && !thresholdCrossed) { triggerHaptic(10); thresholdCrossed = true; } 
+        else if (displacement > -40 && thresholdCrossed) { triggerHaptic(5); thresholdCrossed = false; }
+    }, {passive: true});
+
+    document.addEventListener('touchcancel', resetSwipeState, {passive: true});
+
+    document.addEventListener('touchend', (e) => {
+        if (!activeSwipeElement || isAnimating) return;
+        activeSwipeElement.classList.remove('dragging'); activeSwipeElement.style.transition = 'transform 0.5s var(--spring-bounce)';
+        const deltaX = e.changedTouches[0].clientX - touchStartX; const finalDisplacement = startBaseX + deltaX;
+        let icon = activeActionContainer.querySelector('.swipe-action-icon');
+        const isFlickingLeft = velocity < -0.5; const isFlickingRight = velocity > 0.5; const isPastThreshold = finalDisplacement < -40;
+
+        let shouldOpen = false;
+        if (startBaseX === 0) { if (isPastThreshold || isFlickingLeft) shouldOpen = true; } 
+        else { if (!isFlickingRight && isPastThreshold) shouldOpen = true; }
+
+        if (shouldOpen) { 
+            activeSwipeElement.style.transform = `translateX(-${MAX_SWIPE}px)`; activeSwipeElement.classList.add('swiped'); 
+            if(icon) { icon.style.transition = 'transform 0.4s var(--spring-bounce), opacity 0.3s'; icon.style.transform = 'scale(1)'; icon.style.opacity = '1'; }
+            if (isFlickingLeft && startBaseX === 0 && !isPastThreshold) triggerHaptic(15); 
+        } else { 
+            activeSwipeElement.style.transform = `translateX(0px)`; activeSwipeElement.classList.remove('swiped'); 
+            if(icon) { icon.style.transition = 'transform 0.3s ease, opacity 0.3s'; icon.style.transform = 'scale(0.5)'; icon.style.opacity = '0'; }
+        }
+        activeSwipeElement = null; activeActionContainer = null;
+    });
+
+    function resetSwipeState() {
+        if (!activeSwipeElement) return;
+        activeSwipeElement.classList.remove('dragging'); activeSwipeElement.style.transition = 'transform 0.5s var(--spring-bounce)';
+        activeSwipeElement.style.transform = `translateX(0px)`; activeSwipeElement.classList.remove('swiped');
+        let icon = activeActionContainer.querySelector('.swipe-action-icon');
+        if(icon) { icon.style.transform = 'scale(0.5)'; icon.style.opacity = '0'; }
+        activeSwipeElement = null; activeActionContainer = null;
+    }
+
+    function deleteTransaction(index, btnElement) {
+        if(isAnimating) return; triggerHaptic(30);
+        if(confirm("Delete this transaction permanently?")) {
+            isAnimating = true; const container = btnElement.closest('.swipe-container'); container.classList.add('deleting'); 
+            setTimeout(() => {
+                saveState(); const t = data.history[index];
+                if(t.type === 'expense') { data[t.account] += t.amount; }
+                else if(t.type === 'income') { data[t.account] -= t.amount; }
+                else if(t.type === 'save') { 
+                    data[t.account] += t.amount; data.savings -= t.amount;
+                    let goalName = t.category.replace("Saved for: ", "");
+                    let goal = data.goals.find(g => g.name === goalName); if(goal) goal.current -= t.amount;
+                }
+                data.history.splice(index, 1); updateUI(); showToast("Transaction Deleted"); isAnimating = false; 
+            }, 400);
+        } else { resetSwipeState(); }
+    }
+    
+    function settleIOU(index, btnElement) { 
+        if(isAnimating) return; triggerHaptic(30); isAnimating = true;
+        const container = btnElement.closest('.swipe-container'); container.classList.add('deleting');
+        setTimeout(() => { saveState(); data.ious.splice(index, 1); updateUI(); showToast("Debt Settled"); isAnimating = false; }, 400);
+    }
+
+    function deleteGoal(index, btnElement) {
+        if(isAnimating) return; triggerHaptic(30);
+        if(confirm(`Delete the goal "${data.goals[index].name}"?`)) {
+            isAnimating = true; const container = btnElement.closest('.swipe-container'); container.classList.add('deleting');
+            setTimeout(() => { saveState(); data.goals.splice(index, 1); updateUI(); showToast("Goal Removed"); isAnimating = false; }, 400);
+        } else { resetSwipeState(); }
+    }
+
+    function deleteBudget(category, btnElement) {
+        if(isAnimating) return; triggerHaptic(30);
+        if(confirm(`Remove budget limit for ${category}?`)) {
+            isAnimating = true; const container = btnElement.closest('.swipe-container'); container.classList.add('deleting');
+            setTimeout(() => { 
+                saveState(); 
+                delete data.budgets[category]; 
+                delete data.rollovers[category];
+                updateUI(); 
+                showToast("Budget Removed"); 
+                isAnimating = false; 
+            }, 400);
+        } else { resetSwipeState(); }
+    }
+
+    function triggerHaptic(pattern = 15) { if (navigator.vibrate) { try { navigator.vibrate(pattern); } catch(e){} } }
+    
+    document.addEventListener('mousedown', function(e) {
+        const target = e.target.closest('button, .contact-chip, .nav-item, .action-btn, .clickable-goal, .segment-btn, .cat-box, .settings-item, .more-card');
+        if (!target) return;
+        if (target.classList.contains('switch') || target.closest('.switch') || target.id === 'lock-screen' || target.closest('#lock-screen')) return; 
+
+        const rect = target.getBoundingClientRect(); const ripple = document.createElement('span');
+        const diameter = Math.max(rect.width, rect.height); const radius = diameter / 2;
+        ripple.style.width = ripple.style.height = `${diameter}px`;
+        ripple.style.left = `${e.clientX - rect.left - radius}px`; ripple.style.top = `${e.clientY - rect.top - radius}px`;
+        ripple.className = 'ripple'; if (getComputedStyle(target).position === 'static') target.style.position = 'relative';
+        target.style.overflow = 'hidden'; target.appendChild(ripple); setTimeout(() => ripple.remove(), 500);
+    });
+
+    function animateValue(id, endVal) {
+        const obj = document.getElementById(id); if (!obj) return;
+        const startVal = parseFloat(obj.innerText.replace(/,/g, '')) || 0;
+        if (startVal === endVal) return; const duration = 700; let startTimestamp = null;
+        const step = (timestamp) => {
+            if (!startTimestamp) startTimestamp = timestamp;
+            const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+            const easeOut = 1 - Math.pow(1 - progress, 3);
+            const current = startVal + (endVal - startVal) * easeOut;
+            obj.innerText = formatMoney(current);
+            if (progress < 1) { window.requestAnimationFrame(step); } else { obj.innerText = formatMoney(endVal); }
+        }; window.requestAnimationFrame(step);
+    }
+
+    function showToast(message) { const toast = document.getElementById("toast"); toast.innerText = message; toast.className = "show"; setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 2800); }
+    function saveState() { undoStack.push(JSON.stringify(data)); if (undoStack.length > 20) undoStack.shift(); redoStack = []; updateUndoRedoButtons(); }
+    function undoAction() { triggerHaptic(20); if (undoStack.length === 0) return; redoStack.push(JSON.stringify(data)); data = JSON.parse(undoStack.pop()); updateUI(); showToast("Action Undone"); }
+    function redoAction() { triggerHaptic(20); if (redoStack.length === 0) return; undoStack.push(JSON.stringify(data)); data = JSON.parse(redoStack.pop()); updateUI(); showToast("Action Redone"); }
+    function updateUndoRedoButtons() { const btnUndo = document.getElementById('btn-undo'); const btnRedo = document.getElementById('btn-redo'); if(btnUndo) btnUndo.disabled = (undoStack.length === 0); if(btnRedo) btnRedo.disabled = (redoStack.length === 0); }
+
+    function openGoalModal(index) { 
+        triggerHaptic(15); currentGoalIndex = index; 
+        document.getElementById('modal-goal-name').innerText = `Add to ${data.goals[index].name}`; 
+        document.getElementById('goal-modal').classList.add('active'); 
+        document.body.classList.add('modal-open'); 
+    }
+    
+    function closeGoalModal() { 
+        triggerHaptic(10); document.getElementById('goal-modal').classList.remove('active'); 
+        document.getElementById('modal-amount').value = ''; currentGoalIndex = null; document.body.classList.remove('modal-open'); 
+    }
+    
+    function submitGoalFunds() {
+        triggerHaptic(20); if (currentGoalIndex === null) return;
+        const amount = parseFloat(document.getElementById('modal-amount').value); const account = document.querySelector('input[name="sav-account"]:checked').value;
+        if (isNaN(amount) || amount <= 0) return showToast("Enter a valid amount.");
+        
+        saveState(); 
+        data[account] = (parseFloat(data[account]) || 0) - amount; 
+        data.savings = (parseFloat(data.savings) || 0) + amount; 
+        
+        let targetGoal = data.goals[currentGoalIndex];
+        targetGoal.current += amount;
+        
+        const categoryStr = "Saved for: " + targetGoal.name;
+        data.history.push({ type: 'save', account: account, amount: amount, category: categoryStr, date: new Date().toLocaleDateString() });
+        
+        closeGoalModal(); 
+        
+        if (targetGoal.current >= targetGoal.target) {
+            triggerHaptic([40, 60, 40, 60, 100]); 
+            showToast(`🎉 Goal Completed: ${targetGoal.name}!`);
+            
+            if (typeof confetti === 'function') {
+                const colors = ['#6366F1', '#22C55E', '#F43F5E', '#FFFFFF'];
+                const defaults = { origin: { y: 0.6 }, colors: colors, zIndex: 9999 };
+                function fire(particleRatio, opts) { confetti(Object.assign({}, defaults, opts, { particleCount: Math.floor(150 * particleRatio) })); }
+                
+                fire(0.25, { spread: 26, startVelocity: 55 });
+                fire(0.2, { spread: 60 });
+                fire(0.35, { spread: 100, decay: 0.91, scalar: 0.8 });
+                fire(0.1, { spread: 120, startVelocity: 25, decay: 0.92, scalar: 1.2 });
+                fire(0.1, { spread: 120, startVelocity: 45 });
+            }
+            
+            updateUI(); 
+            
+            setTimeout(() => {
+                const dashboardGoals = document.getElementById('dashboard-goals-wrapper');
+                const manageList = document.getElementById('manage-savings-wrapper');
+                
+                if (dashboardGoals) dashboardGoals.style.opacity = '0';
+                if (manageList) manageList.style.opacity = '0';
+                
+                setTimeout(() => {
+                    const idx = data.goals.indexOf(targetGoal);
+                    if (idx > -1) data.goals.splice(idx, 1);
+                    updateUI(); 
+                    
+                    if (dashboardGoals) { dashboardGoals.style.transition = 'opacity 0.4s ease'; dashboardGoals.style.opacity = '1'; }
+                    if (manageList) { manageList.style.transition = 'opacity 0.4s ease'; manageList.style.opacity = '1'; }
+                    
+                    setTimeout(() => {
+                        if (dashboardGoals) dashboardGoals.style.transition = 'opacity 0.4s ease';
+                        if (manageList) manageList.style.transition = 'opacity 0.4s ease';
+                    }, 400);
+                }, 300); 
+            }, 2500); 
+            
+        } else {
+            updateUI(); 
+            showToast("Funds Added to Goal");
+        }
+    }
+
+    function createNewGoal() {
+        triggerHaptic(20); const name = document.getElementById('new-goal-name').value.trim(); const target = parseFloat(document.getElementById('new-goal-target').value); const deadline = document.getElementById('new-goal-date').value;
+        if (!name || isNaN(target) || target <= 0) return showToast("Provide a name and target amount.");
+        saveState(); data.goals.push({ name: name, target: target, current: 0, deadline: deadline }); document.getElementById('new-goal-name').value = ''; document.getElementById('new-goal-target').value = ''; document.getElementById('new-goal-date').value = ''; updateUI(); switchTab('dashboard'); showToast("Goal Created");
+    }
+
+    function setBudget() {
+        triggerHaptic(20); const category = activeBudgetCat; const limit = parseFloat(document.getElementById('budget-limit').value);
+        if (isNaN(limit) || limit <= 0) return showToast("Enter a valid limit.");
+        saveState(); 
+        data.budgets[category] = limit; 
+        if(!data.rollovers[category]) data.rollovers[category] = 0; 
+        document.getElementById('budget-limit').value = ''; 
+        updateUI(); switchTab('dashboard'); showToast("Budget Set");
+    }
+
+    // --- WISHLIST / RADAR LOGIC ---
+    function addWishlist() {
+        triggerHaptic(20);
+        const name = document.getElementById('radar-name').value.trim();
+        const price = parseFloat(document.getElementById('radar-price').value);
+        const link = document.getElementById('radar-link').value.trim();
+        const priority = document.querySelector('input[name="radar-priority"]:checked').value;
+
+        if (!name || isNaN(price) || price <= 0) return showToast("Enter a product name and price.");
+        saveState();
+        data.wishlist.push({ name: name, price: price, link: link, priority: priority });
+        
+        document.getElementById('radar-name').value = ''; document.getElementById('radar-price').value = ''; document.getElementById('radar-link').value = '';
+        updateUI(); showToast("Added to Radar");
+    }
+
+    function deleteWishlist(index) {
+        triggerHaptic(20);
+        if(confirm(`Remove "${data.wishlist[index].name}" from your Radar?`)) { saveState(); data.wishlist.splice(index, 1); updateUI(); showToast("Item Removed"); }
+    }
+
+    function startRadarGoal(index) {
+        triggerHaptic(20);
+        const item = data.wishlist[index];
+        saveState();
+        data.goals.push({ name: item.name, target: item.price, current: 0, deadline: '' });
+        showToast("Goal created! Start tracking.");
+        closeSubView('sub-radar');
+        updateUI(); switchTab('savings');
+    }
+
+    function openBuyModal(index) {
+        triggerHaptic(15);
+        currentBuyIndex = index;
+        const item = data.wishlist[index];
+        document.getElementById('modal-buy-name').innerText = `Buy ${item.name}`;
+        document.getElementById('buy-amount').innerText = `₹${formatMoney(item.price)}`;
+        document.getElementById('buy-modal').classList.add('active');
+        document.body.classList.add('modal-open');
+    }
+
+    function closeBuyModal() {
+        triggerHaptic(10);
+        document.getElementById('buy-modal').classList.remove('active');
+        currentBuyIndex = null;
+        document.body.classList.remove('modal-open');
+    }
+
+    function submitBuyItem() {
+        triggerHaptic(25);
+        if (currentBuyIndex === null) return;
+        
+        const item = data.wishlist[currentBuyIndex];
+        const accountStr = document.querySelector('input[name="buy-account"]:checked').value;
+        const categoryStr = document.getElementById('buy-category').value;
+        
+        saveState(); 
+        data[accountStr] = (parseFloat(data[accountStr]) || 0) - item.price;
+        const finalCategoryStr = `${categoryStr} (Bought: ${item.name})`;
+        data.history.push({ type: 'expense', account: accountStr, amount: item.price, category: finalCategoryStr, date: new Date().toLocaleDateString() });
+        
+        data.wishlist.splice(currentBuyIndex, 1);
+        closeBuyModal(); closeSubView('sub-radar'); updateUI(); switchTab('dashboard'); showToast("Item Purchased!");
+    }
+
+
+    function fillPayee(el, name) { 
+        triggerHaptic(15); 
+        document.getElementById('iou-person').value = name; 
+        document.querySelectorAll('.contact-chip').forEach(c => c.classList.remove('active-chip'));
+        el.classList.add('active-chip');
+        setTimeout(() => { el.classList.remove('active-chip'); }, 400); 
+    }
+
+    function addIOU() {
+        triggerHaptic(20); 
+        const type = document.querySelector('input[name="iou-type"]:checked').value; 
+        const person = document.getElementById('iou-person').value.trim(); 
+        const amount = parseFloat(document.getElementById('iou-amount').value);
+        
+        if (!person || isNaN(amount) || amount <= 0) return showToast("Enter a name and amount.");
+        saveState(); data.ious.push({ type: type, person: person, amount: amount }); 
+        
+        data.recentPayees = data.recentPayees.filter(p => p.toLowerCase() !== person.toLowerCase()); data.recentPayees.unshift(person); if(data.recentPayees.length > 8) data.recentPayees.pop();
+        document.getElementById('iou-person').value = ''; document.getElementById('iou-amount').value = ''; updateUI(); showToast("IOU Saved");
+    }
+
+    function formatMoney(amount) { let num = parseFloat(amount); if(isNaN(num)) num = 0; return Number.isInteger(num) ? num : num.toFixed(2); }
+
+    const centerTextPlugin = {
+        id: 'centerText',
+        beforeDraw: function(chart) {
+            if (chart.config.type !== 'doughnut') return;
+            if (!chart.config.options.plugins.centerText) return;
+            
+            const ctx = chart.ctx;
+            const width = chart.width;
+            const height = chart.height;
+            ctx.restore();
+            
+            const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-main').trim();
+            const labelColor = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim();
+            
+            ctx.textBaseline = "middle";
+
+            const total = chart.config.options.plugins.centerText.total || 0;
+            const text = "₹" + formatMoney(total);
+            ctx.font = "700 1.4rem 'Space Mono', monospace"; 
+            const textX = Math.round((width - ctx.measureText(text).width) / 2);
+            const textY = height / 2 + 8;
+            ctx.fillStyle = textColor;
+            ctx.fillText(text, textX, textY);
+
+            const label = "Spent";
+            ctx.font = "500 0.85rem 'Inter', sans-serif";
+            const labelX = Math.round((width - ctx.measureText(label).width) / 2);
+            const labelY = height / 2 - 16;
+            ctx.fillStyle = labelColor;
+            ctx.fillText(label, labelX, labelY);
+            
+            ctx.save();
+        }
+    };
+    Chart.register(centerTextPlugin);
+
+    function renderTagSelector() {
+        const selector = document.getElementById('tag-selector');
+        if(!selector) return;
+        
+        let tags = new Set();
+        data.history.forEach(t => { let match = t.category.match(/#\w+/g); if(match) match.forEach(tag => tags.add(tag.toLowerCase())); });
+        Object.values(data.archives).forEach(month => { month.forEach(t => { let match = t.category.match(/#\w+/g); if(match) match.forEach(tag => tags.add(tag.toLowerCase())); }); });
+        
+        const sortedTags = Array.from(tags).sort();
+        const currentSelection = selector.value;
+        
+        if (sortedTags.length === 0) {
+            selector.innerHTML = '<option value="">No tags found yet...</option>'; selector.disabled = true;
+            document.getElementById('trip-dashboard-wrapper').style.display = 'none'; return;
+        }
+        
+        selector.disabled = false; selector.innerHTML = '<option value="">Select a #tag to analyze...</option>';
+        sortedTags.forEach(tag => { const opt = document.createElement('option'); opt.value = tag; opt.textContent = tag; selector.appendChild(opt); });
+        
+        if (sortedTags.includes(currentSelection)) { selector.value = currentSelection; showTagData(); } 
+        else { document.getElementById('trip-dashboard-wrapper').style.display = 'none'; }
+    }
+
+    function showTagData() {
+        const selector = document.getElementById('tag-selector');
+        const wrapper = document.getElementById('trip-dashboard-wrapper');
+        const container = document.getElementById('tag-container');
+        const tag = selector.value;
+        
+        if(!tag) { wrapper.style.display = 'none'; return; }
+        
+        let txs = []; let categoryTotals = {};
+        function hasTag(categoryStr, targetTag) { const tags = categoryStr.toLowerCase().match(/#\w+/g); return tags && tags.includes(targetTag); }
+
+        data.history.forEach(t => { if(hasTag(t.category, tag)) txs.push(t); });
+        Object.keys(data.archives).forEach(month => { data.archives[month].forEach(t => { if(hasTag(t.category, tag)) txs.push(t); }); });
+        
+        txs = txs.reverse();
+        
+        let exp = 0, inc = 0, html = '';
+        txs.forEach((t) => {
+            if(t.type === 'expense') { exp += t.amount; let cleanCat = t.category.split(' (')[0]; categoryTotals[cleanCat] = (categoryTotals[cleanCat] || 0) + t.amount; }
+            if(t.type === 'income') inc += t.amount;
+            
+            const sign = t.type === 'expense' ? '-' : '+'; 
+            const colorClass = t.type === 'expense' ? 'text-expense' : 'text-income';
+            const iconClass = t.type === 'expense' ? 'exp-icon' : 'inc-icon';
+            const iconName = getCatIcon(t.category);
+            let displayAccount = t.type === 'save' ? `From ${t.account}` : t.account; 
+            
+            html += `
+            <div class="card" style="padding:16px; margin-bottom:10px; display:flex; align-items:center; gap:16px;">
+                <div class="tx-icon ${iconClass}"><span class="material-symbols-rounded">${iconName}</span></div>
+                <div class="tx-details">
+                    <div class="tx-title">${t.category}</div>
+                    <div class="tx-meta">${displayAccount.toUpperCase()} | ${t.date}</div>
+                </div>
+                <div class="tx-amount mono ${colorClass}">${sign}₹${formatMoney(t.amount)}</div>
+            </div>`;
+        });
+        
+        document.getElementById('trip-dashboard-title').innerText = `${tag.toUpperCase()} Summary`;
+        document.getElementById('trip-inc-val').innerText = `₹${formatMoney(inc)}`;
+        document.getElementById('trip-exp-val').innerText = `₹${formatMoney(exp)}`;
+        container.innerHTML = html; wrapper.style.display = 'block';
+        setTimeout(() => { updateTripChart(categoryTotals, exp); }, 50);
+    }
+
+    function updateTripChart(categoryTotals, totalExpenses) {
+        const canvas = document.getElementById('tripChart'); const emptyMsg = document.getElementById('no-trip-chart-data');
+        if(!canvas || !emptyMsg) return;
+        const ctx = canvas.getContext('2d');
+
+        if (totalExpenses === 0) { canvas.style.display = 'none'; emptyMsg.style.display = 'flex'; return; } 
+        else { canvas.style.display = 'block'; emptyMsg.style.display = 'none'; }
+        
+        const labels = Object.keys(categoryTotals); const chartData = Object.values(categoryTotals);
+        
+        const bgGradients = ['#6366F1', '#8B5CF6', '#D946EF', '#F43F5E', '#F97316', '#14B8A6', '#3B82F6'];
+        const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-main').trim();
+
+        if (tripChart) {
+            tripChart.data.labels = labels; tripChart.data.datasets[0].data = chartData; 
+            tripChart.options.plugins.legend.labels.color = textColor; tripChart.options.plugins.centerText.total = totalExpenses;
+            tripChart.update();
+        } else {
+            tripChart = new Chart(ctx, { 
+                type: 'doughnut', 
+                data: { labels: labels, datasets: [{ data: chartData, backgroundColor: bgGradients, borderWidth: 2, borderColor: '#111111', borderRadius: 8, spacing: 2 }] }, 
+                options: { 
+                    animation: { duration: 1000, easing: 'easeOutQuart' }, responsive: true, maintainAspectRatio: false, cutout: '70%', 
+                    plugins: { 
+                        legend: { position: 'right', labels: { color: textColor, font: { size: 11, family: 'Inter, sans-serif' }, boxWidth: 12, padding: 10 } },
+                        tooltip: { backgroundColor: 'rgba(26, 28, 30, 0.9)', titleFont: { family: 'Inter', size: 13 }, bodyFont: { family: 'Space Mono', size: 14, weight: 'bold' }, padding: 12, cornerRadius: 12, displayColors: false, callbacks: { label: function(context) { return '₹' + formatMoney(context.parsed); } } },
+                        centerText: { total: totalExpenses }
+                    } 
+                } 
+            });
+        }
+    }
+
+    function shareTrip() {
+        const tag = document.getElementById('tag-selector').value;
+        if(!tag) return; triggerHaptic(15);
+        const inc = document.getElementById('trip-inc-val').innerText;
+        const exp = document.getElementById('trip-exp-val').innerText;
+        const text = `✈️ Trip Summary: ${tag.toUpperCase()}\n\n💸 Total Spent: ${exp}\n💰 Total Funded: ${inc}\n\nTracked via Rupee Tracker Pro`;
+        if (navigator.share) { navigator.share({ title: `${tag} Summary`, text: text }).catch(console.error); } 
+        else { navigator.clipboard.writeText(text); showToast("Copied to clipboard!"); }
+    }
+
+    function updateUI() {
+        updateUndoRedoButtons(); 
+        
+        // Gradient Dynamic Change
+        const heroCard = document.getElementById('hero-card');
+        let currentMonthInc = 0; let currentMonthExp = 0;
+        data.history.forEach(t => { if(t.type === 'income') currentMonthInc += t.amount; if(t.type === 'expense') currentMonthExp += t.amount; });
+        if (heroCard) {
+            if (currentMonthExp > currentMonthInc && currentMonthExp > 0) { heroCard.classList.add('deficit'); } 
+            else { heroCard.classList.remove('deficit'); }
+        }
+        
+        animateValue('total-bal', data.upi + data.cash);
+        animateValue('upi-bal', data.upi); 
+        animateValue('cash-bal', data.cash);
+        
+        // REFRESH GOALS
+        const dashboardGoals = document.getElementById('goals-list-dashboard'); 
+        const manageSavingsList = document.getElementById('manage-savings-list');
+        let dHtml = ''; let mHtml = '';
+
+        data.goals.forEach((g, idx) => {
+            let deadlineText = '';
+            if (g.deadline) {
+                const today = new Date(); const dDate = new Date(g.deadline); const diffDays = Math.ceil((dDate - today) / (1000 * 60 * 60 * 24)); const remaining = g.target - g.current;
+                if (remaining <= 0) { deadlineText = 'Reached'; } else if (diffDays < 0) { deadlineText = 'Passed'; } else { const perWeek = diffDays >= 7 ? (remaining / (diffDays/7)) : remaining; deadlineText = `₹${formatMoney(perWeek)}/wk`; }
+            } else {
+                deadlineText = 'Ongoing';
+            }
+            const percent = Math.min(100, Math.round((g.current / g.target) * 100)) || 0;
+            
+            dHtml += `
+            <div class="goal-card pop-in clickable-goal" style="animation-delay: ${idx * 0.05}s" onclick="openGoalModal(${idx})">
+                <div class="goal-info">
+                    <span class="goal-title">${g.name}</span>
+                    <span class="goal-amounts mono">₹${formatMoney(g.current)} / ₹${formatMoney(g.target)}</span>
+                </div>
+                <div class="progress-track"><div class="progress-fill" style="width: ${percent}%;"></div></div>
+                <div class="goal-meta"><span>${percent}% Funded</span><span>${deadlineText}</span></div>
+            </div>`;
+            
+            mHtml += `
+            <div class="swipe-container pop-in" style="animation-delay: ${idx * 0.05}s">
+                <div class="swipe-action-delete" onclick="deleteGoal(${idx}, this)"><span class="material-symbols-rounded swipe-action-icon">delete</span></div>
+                <div class="swipe-content goal-card-content">
+                    <div class="goal-info"><span class="goal-title">${g.name}</span><span class="goal-amounts mono">₹${formatMoney(g.current)} / ₹${formatMoney(g.target)}</span></div>
+                    <div class="progress-track"><div class="progress-fill" style="width: ${percent}%;"></div></div>
+                    <div class="goal-meta"><span>${percent}% Funded</span><span>${deadlineText}</span></div>
+                </div>
+            </div>`;
+        });
+
+        // REFRESH BUDGETS (WITH ROLLOVER LOGIC)
+        const spent = {}; data.history.forEach(t => { if (t.type === 'expense') spent[t.category.split(' (')[0]] = (spent[t.category.split(' (')[0]] || 0) + t.amount; });
+        let delayCounter = data.goals.length;
+
+        Object.keys(data.budgets).forEach(cat => {
+            const baseLimit = data.budgets[cat]; 
+            const rollover = data.rollovers[cat] || 0;
+            const limit = baseLimit + rollover;
+            
+            const currentSpent = spent[cat] || 0; 
+            const percent = Math.min(100, Math.round((currentSpent / limit) * 100)) || 0; 
+            const isWarning = currentSpent >= limit * 0.9; 
+            const fillClass = isWarning ? 'progress-fill budget-warning' : 'progress-fill budget-normal';
+            
+            let rolloverBadge = rollover > 0 ? `<span style="background:var(--income-bg); color:var(--income); padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:8px;">+₹${formatMoney(rollover)} Rollover</span>` : '';
+            
+            dHtml += `
+            <div class="goal-card pop-in" style="animation-delay: ${delayCounter * 0.05}s">
+                <div class="goal-info"><span class="goal-title" style="display:flex; align-items:center;">${cat} ${rolloverBadge}</span><span class="goal-amounts mono" style="color: var(${isWarning ? '--expense' : '--income'})">₹${formatMoney(currentSpent)} / ₹${formatMoney(limit)}</span></div>
+                <div class="progress-track"><div class="${fillClass}" style="width: ${percent}%;"></div></div>
+                <div class="goal-meta"><span>${percent}% Spent</span><span style="color: var(${isWarning ? '--expense' : '--text-muted'})">${isWarning ? 'Approaching limit' : `₹${formatMoney(limit - currentSpent)} left`}</span></div>
+            </div>`;
+            
+            mHtml += `
+            <div class="swipe-container pop-in" style="animation-delay: ${delayCounter * 0.05}s">
+                <div class="swipe-action-delete" onclick="deleteBudget('${cat}', this)"><span class="material-symbols-rounded swipe-action-icon">delete</span></div>
+                <div class="swipe-content goal-card-content">
+                    <div class="goal-info"><span class="goal-title" style="display:flex; align-items:center;">${cat} ${rolloverBadge}</span><span class="goal-amounts mono" style="color: var(${isWarning ? '--expense' : '--income'})">₹${formatMoney(currentSpent)} / ₹${formatMoney(limit)}</span></div>
+                    <div class="progress-track"><div class="${fillClass}" style="width: ${percent}%;"></div></div>
+                    <div class="goal-meta"><span>${percent}% Spent</span><span style="color: var(${isWarning ? '--expense' : '--text-muted'})">${isWarning ? 'Approaching limit' : `₹${formatMoney(limit - currentSpent)} left`}</span></div>
+                </div>
+            </div>`;
+            delayCounter++;
+        });
+
+        if (dHtml === '') dHtml = '<div class="empty-state" style="padding:20px;"><span class="material-symbols-rounded">flag</span><span>No active plans.</span></div>';
+        if (dashboardGoals) dashboardGoals.innerHTML = dHtml;
+        
+        if (mHtml === '') mHtml = '<div class="empty-state"><span class="material-symbols-rounded">flag</span><span>No active plans to manage.</span></div>';
+        if (manageSavingsList) manageSavingsList.innerHTML = mHtml;
+
+        // REFRESH WISHLIST
+        const wishlistContainer = document.getElementById('wishlist-container');
+        if (wishlistContainer) {
+            wishlistContainer.innerHTML = '';
+            if (data.wishlist.length === 0) wishlistContainer.innerHTML = '<div class="empty-state"><span class="material-symbols-rounded">radar</span><span>Your radar is clear.</span></div>';
+            data.wishlist.forEach((item, idx) => {
+                let badgeColor = item.priority === 'High' ? 'var(--expense)' : item.priority === 'Med' ? 'var(--primary)' : 'var(--income)';
+                let badgeBg = item.priority === 'High' ? 'var(--expense-bg)' : item.priority === 'Med' ? 'var(--primary-glow)' : 'var(--income-bg)';
+                let linkHtml = item.link ? `<a href="${item.link}" target="_blank" style="color: var(--primary); text-decoration:none;"><span class="material-symbols-rounded" style="font-size:1.1rem; vertical-align:middle;">link</span></a>` : '';
+                
+                wishlistContainer.innerHTML += `
+                <div class="card pop-in" style="display:flex; flex-direction: column; align-items: stretch; gap: 16px; animation-delay: ${idx * 0.05}s">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div>
+                            <div style="font-weight: 600; font-size: 1.15rem; margin-bottom:6px;">${item.name} ${linkHtml}</div>
+                            <span style="padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color:${badgeColor}; background:${badgeBg};">${item.priority} Priority</span>
+                        </div>
+                        <div class="mono" style="font-weight: 700; font-size: 1.25rem; color: var(--text-main);">₹${formatMoney(item.price)}</div>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="action-btn" style="background:var(--surface-high); border-radius:12px; font-size:1rem; flex:1;" onclick="startRadarGoal(${idx})"><span class="material-symbols-rounded">track_changes</span> Save</button>
+                        <button class="action-btn" style="background:var(--primary); color:white; border-radius:12px; font-size:1rem; flex:1; border:none;" onclick="openBuyModal(${idx})"><span class="material-symbols-rounded">shopping_bag</span> Buy</button>
+                        <button class="action-btn" style="background:var(--expense-bg); color:var(--expense); border-radius:12px; font-size:1rem; border:none;" onclick="deleteWishlist(${idx})"><span class="material-symbols-rounded">delete</span></button>
+                    </div>
+                </div>`;
+            });
+        }
+
+        const payeeChips = document.getElementById('payee-chips');
+        if (payeeChips) { 
+            payeeChips.innerHTML = data.recentPayees.map(name => {
+                const initial = name.charAt(0).toUpperCase();
+                return `<div class="contact-chip" onclick="fillPayee(this, '${name.replace(/'/g, "\\'")}')"><div class="contact-avatar">${initial}</div><span>${name}</span></div>`;
+            }).join(''); 
+        }
+
+        // COMPACT TRANSACTION LIST
+        const historyList = document.getElementById('history-list'); 
+        if(historyList) {
+            historyList.innerHTML = '';
+            if (data.history.length === 0) historyList.innerHTML = '<div class="empty-state" style="padding:20px;"><span class="material-symbols-rounded">receipt_long</span><span>No recent transactions.</span></div>';
+            const reversedHistory = data.history.slice().reverse().slice(0, 15);
+            reversedHistory.forEach((t, i) => { 
+                let actualIndex = data.history.length - 1 - i;
+                const sign = t.type === 'expense' ? '-' : '+'; 
+                const colorClass = t.type === 'expense' ? 'text-expense' : 'text-income'; 
+                const iconClass = t.type === 'expense' ? 'exp-icon' : 'inc-icon';
+                const iconName = getCatIcon(t.category);
+                let displayAccount = t.type === 'save' ? `From ${t.account}` : t.account;
+                
+                const itemHTML = `
+                <div class="swipe-container pop-in" style="animation-delay: ${i * 0.03}s">
+                    <div class="swipe-action-delete" onclick="deleteTransaction(${actualIndex}, this)">
+                        <span class="material-symbols-rounded swipe-action-icon">delete</span>
+                    </div>
+                    <div class="swipe-content tx-row">
+                        <div class="tx-icon ${iconClass}"><span class="material-symbols-rounded">${iconName}</span></div>
+                        <div class="tx-details">
+                            <div class="tx-title">${t.category}</div>
+                            <div class="tx-meta">${displayAccount.toUpperCase()} • ${t.date}</div>
+                        </div>
+                        <div class="tx-amount mono ${colorClass}">${sign}₹${formatMoney(t.amount)}</div>
+                    </div>
+                </div>`;
+                historyList.insertAdjacentHTML('beforeend', itemHTML);
+            });
+        }
+
+        const iouList = document.getElementById('iou-list'); 
+        if(iouList) {
+            iouList.innerHTML = '';
+            let totalLent = 0; let totalBorrowed = 0;
+            data.ious.forEach(iou => { if(iou.type === 'lent') totalLent += iou.amount; else totalBorrowed += iou.amount; });
+            animateValue('iou-total-lent', totalLent); animateValue('iou-total-borrowed', totalBorrowed);
+
+            if (data.ious.length === 0) iouList.innerHTML = '<div class="empty-state"><span class="material-symbols-rounded">handshake</span><span>No active IOUs.</span></div>';
+            data.ious.forEach((iou, index) => {
+                const isLent = iou.type === 'lent';
+                const colorClass = isLent ? 'text-income' : 'text-expense';
+                const iconClass = isLent ? 'inc-icon' : 'exp-icon';
+                const iconName = isLent ? 'arrow_downward' : 'arrow_upward';
+                const actionText = isLent ? `Owes you:` : `You owe them:`; 
+                
+                const itemHTML = `
+                <div class="swipe-container pop-in" style="animation-delay: ${index * 0.05}s">
+                    <div class="swipe-action-settle" onclick="settleIOU(${index}, this)">
+                        <span class="material-symbols-rounded swipe-action-icon">check_circle</span>
+                    </div>
+                    <div class="swipe-content tx-row">
+                        <div class="tx-icon ${iconClass}"><span class="material-symbols-rounded">${iconName}</span></div>
+                        <div class="tx-details">
+                            <div class="tx-title">${iou.person}</div>
+                            <div class="tx-meta">${actionText}</div>
+                        </div>
+                        <div class="tx-amount mono ${colorClass}">₹${formatMoney(iou.amount)}</div>
+                    </div>
+                </div>`;
+                iouList.insertAdjacentHTML('beforeend', itemHTML);
+            });
+        }
+
+        updateChart(); 
+        updateRecapChart();
+        renderArchiveSelector();
+        renderTagSelector(); 
+        try { localStorage.setItem('financeData', JSON.stringify(data)); } catch(e){}
+    }
+
+    function updateChart() {
+        const canvas = document.getElementById('expenseChart'); const emptyMsg = document.getElementById('no-chart-data');
+        if(!canvas || !emptyMsg) return;
+        const ctx = canvas.getContext('2d');
+        const categoryTotals = {}; let totalExpenses = 0;
+        
+        data.history.forEach(t => { 
+            if (t.type === 'expense') { 
+                let cleanCat = t.category.split(' (')[0];
+                categoryTotals[cleanCat] = (categoryTotals[cleanCat] || 0) + t.amount; 
+                totalExpenses += t.amount; 
+            } 
+        });
+        
+        if (totalExpenses === 0) { canvas.style.display = 'none'; emptyMsg.style.display = 'flex'; return; } 
+        else { canvas.style.display = 'block'; emptyMsg.style.display = 'none'; }
+        
+        const labels = Object.keys(categoryTotals); const chartData = Object.values(categoryTotals);
+        const bgGradients = ['#6366F1', '#8B5CF6', '#D946EF', '#F43F5E', '#F97316', '#14B8A6', '#3B82F6'];
+        const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-main').trim();
+        const surfaceColor = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim();
+
+        if (myChart) {
+            myChart.data.labels = labels; 
+            myChart.data.datasets[0].data = chartData; 
+            myChart.options.plugins.legend.labels.color = textColor; 
+            myChart.data.datasets[0].borderColor = surfaceColor; 
+            myChart.data.datasets[0].backgroundColor = bgGradients; 
+            myChart.options.plugins.centerText.total = totalExpenses;
+            myChart.update();
+        } else {
+            myChart = new Chart(ctx, { 
+                type: 'doughnut', 
+                data: { labels: labels, datasets: [{ data: chartData, backgroundColor: bgGradients, borderWidth: 3, borderColor: surfaceColor, borderRadius: 10, spacing: 2 }] }, 
+                options: { 
+                    animation: { duration: 1000, easing: 'easeOutQuart' }, responsive: true, maintainAspectRatio: false, cutout: '76%', 
+                    plugins: { 
+                        legend: { position: 'bottom', labels: { color: textColor, font: { size: 12, family: 'Inter, sans-serif' }, boxWidth: 10, padding: 16 } },
+                        tooltip: { backgroundColor: 'rgba(26, 28, 30, 0.9)', titleFont: { family: 'Inter', size: 12 }, bodyFont: { family: 'Space Mono', size: 14, weight: 'bold' }, padding: 12, cornerRadius: 12, displayColors: false, callbacks: { label: function(context) { return '₹' + formatMoney(context.parsed); } } },
+                        centerText: { total: totalExpenses }
+                    } 
+                } 
+            });
+        }
+    }
+
+    function updateRecapChart() {
+        const canvas = document.getElementById('recapChart');
+        if(!canvas) return;
+        const ctx = canvas.getContext('2d');
+
+        const last12Months = []; const labels = [];
+        const d = new Date();
+        for(let i = 11; i >= 0; i--) {
+            const tempDate = new Date(d.getFullYear(), d.getMonth() - i, 1);
+            const yyyy = tempDate.getFullYear();
+            const mm = String(tempDate.getMonth() + 1).padStart(2, '0');
+            last12Months.push(`${yyyy}-${mm}`);
+            labels.push(tempDate.toLocaleString('default', { month: 'short' }));
+        }
+
+        const incomeData = []; const expenseData = [];
+        let totalInc = 0; let totalExp = 0;
+
+        last12Months.forEach(m => {
+            let mInc = 0; let mExp = 0;
+            let txs = [];
+            if(m === data.currentMonth) txs = data.history;
+            else if(data.archives[m]) txs = data.archives[m];
+
+            txs.forEach(t => {
+                if(t.type === 'income') mInc += t.amount;
+                if(t.type === 'expense') mExp += t.amount;
+            });
+            incomeData.push(mInc); expenseData.push(mExp);
+            totalInc += mInc; totalExp += mExp;
+        });
+
+        document.getElementById('recap-summary').innerHTML = `
+            <span style="color: var(--income);">Total In: ₹${formatMoney(totalInc)}</span>
+            <span style="color: var(--expense);">Total Out: ₹${formatMoney(totalExp)}</span>
+        `;
+
+        const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-main').trim();
+        const incColor = getComputedStyle(document.documentElement).getPropertyValue('--income').trim();
+        const expColor = getComputedStyle(document.documentElement).getPropertyValue('--expense').trim();
+
+        if (recapChart) {
+            recapChart.data.labels = labels;
+            recapChart.data.datasets[0].data = incomeData; recapChart.data.datasets[0].backgroundColor = incColor;
+            recapChart.data.datasets[1].data = expenseData; recapChart.data.datasets[1].backgroundColor = expColor;
+            recapChart.options.plugins.legend.labels.color = textColor;
+            recapChart.options.scales.x.ticks.color = textColor;
+            recapChart.options.scales.y.ticks.color = textColor;
+            recapChart.update();
+        } else {
+            recapChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Income', data: incomeData, backgroundColor: incColor, borderRadius: 6 },
+                        { label: 'Expense', data: expenseData, backgroundColor: expColor, borderRadius: 6 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top', labels: { color: textColor, font: {family: 'Inter'} } },
+                        tooltip: { backgroundColor: 'rgba(26, 28, 30, 0.9)', titleFont: { family: 'Inter', size: 12 }, bodyFont: { family: 'Space Mono', size: 14, weight: 'bold' }, padding: 12, cornerRadius: 12, displayColors: false, callbacks: { label: function(c) { return '₹' + formatMoney(c.raw); } } }
+                    },
+                    scales: {
+                        x: { ticks: { color: textColor, font: {family: 'Inter'} }, grid: { display: false }, border: {display: false} },
+                        y: { ticks: { color: textColor, font: {family: 'Space Mono'}, callback: function(val) { return '₹' + val; } }, grid: { color: 'rgba(128,128,128,0.1)' }, border: {display: false} }
+                    }
+                }
+            });
+        }
+    }
+
+    function checkMonthlyReset() {
+        const todayMonth = new Date().toISOString().slice(0, 7);
+        if (data.currentMonth !== todayMonth) {
+            const spent = {};
+            data.history.forEach(t => {
+                if(t.type === 'expense') {
+                    let cleanCat = t.category.split(' (')[0];
+                    spent[cleanCat] = (spent[cleanCat] || 0) + t.amount;
+                }
+            });
+
+            Object.keys(data.budgets).forEach(cat => {
+                const baseLimit = data.budgets[cat];
+                const previousRollover = data.rollovers[cat] || 0;
+                const totalAvailable = baseLimit + previousRollover;
+                const amountSpent = spent[cat] || 0;
+                
+                let unspent = totalAvailable - amountSpent;
+                if (unspent > 0) { data.rollovers[cat] = unspent; } 
+                else { data.rollovers[cat] = 0; }
+            });
+            
+            if (data.history && data.history.length > 0) data.archives[data.currentMonth] = [...data.history];
+            data.history = []; data.currentMonth = todayMonth;
+            try { localStorage.setItem('financeData', JSON.stringify(data)); } catch(e){}
+        }
+    }
+
+    function renderArchiveSelector() {
+        const selector = document.getElementById('archive-selector'); const container = document.getElementById('archive-container');
+        if(!selector || !container) return;
+        selector.innerHTML = ''; const months = Object.keys(data.archives).sort().reverse();
+        if (months.length === 0) { selector.style.display = 'none'; container.innerHTML = '<div class="empty-state"><span class="material-symbols-rounded">history</span><span>No archived months yet.</span></div>'; return; }
+        selector.style.display = 'block';
+        months.forEach(m => {
+            const opt = document.createElement('option'); opt.value = m; const dateObj = new Date(m + "-01");
+            opt.textContent = dateObj.toLocaleString('default', { month: 'long', year: 'numeric' }); selector.appendChild(opt);
+        });
+        showArchivedData(); 
+    }
+
+    function showArchivedData() {
+        const selector = document.getElementById('archive-selector'); const container = document.getElementById('archive-container');
+        if(!selector || !container) return;
+        const month = selector.value; if(!month || !data.archives[month]) return;
+
+        const hist = data.archives[month]; let exp = 0, inc = 0, html = '';
+        hist.slice().reverse().forEach((t) => {
+            if(t.type === 'expense') exp += t.amount; if(t.type === 'income') inc += t.amount;
+            const sign = t.type === 'expense' ? '-' : '+'; 
+            const colorClass = t.type === 'expense' ? 'text-expense' : 'text-income';
+            const iconClass = t.type === 'expense' ? 'exp-icon' : 'inc-icon';
+            const iconName = getCatIcon(t.category);
+            let displayAccount = t.type === 'save' ? `From ${t.account}` : t.account;
+            
+            html += `
+            <div class="card" style="padding:16px; margin-bottom:10px; display:flex; align-items:center; gap:16px;">
+                <div class="tx-icon ${iconClass}"><span class="material-symbols-rounded">${iconName}</span></div>
+                <div class="tx-details">
+                    <div class="tx-title">${t.category}</div>
+                    <div class="tx-meta">${displayAccount.toUpperCase()} | ${t.date}</div>
+                </div>
+                <div class="tx-amount mono ${colorClass}">${sign}₹${formatMoney(t.amount)}</div>
+            </div>`;
+        });
+        container.innerHTML = `<div style="display:flex; justify-content:space-between; margin-bottom: 24px; font-size: 1.15rem; font-weight:600;"><span class="text-income">In: ₹${formatMoney(inc)}</span><span class="text-expense">Spent: ₹${formatMoney(exp)}</span></div>${html}`;
+    }
+
+    // --- NAVIGATION ENGINE ---
+    const primaryTabs = ['dashboard', 'log', 'savings', 'insights', 'more'];
+    let currentTabIndex = 0;
+
+    function switchTab(tabId, element) {
+        triggerHaptic(10);
+        
+        // Hide More Menu internals if switching primary tabs
+        if(primaryTabs.includes(tabId)) {
+            document.getElementById('more-main-menu').style.display = 'block';
+            document.querySelectorAll('.sub-tab').forEach(sub => sub.style.display = 'none');
+            document.getElementById('main-header').style.display = 'flex';
+        }
+
+        const targetIndex = primaryTabs.indexOf(tabId);
+        const isForward = targetIndex > currentTabIndex;
+        currentTabIndex = targetIndex > -1 ? targetIndex : currentTabIndex;
+
+        window.scrollTo({ top: 0, behavior: 'instant' });
+
+        document.querySelectorAll('.tab-content').forEach(tab => { tab.classList.remove('active', 'slide-left', 'slide-right'); });
+        document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+        
+        const targetTab = document.getElementById('tab-' + tabId); 
+        if(targetTab) {
+            targetTab.classList.add('active');
+            targetTab.classList.add(isForward ? 'slide-right' : 'slide-left');
+        }
+        
+        if (element) { element.classList.add('active'); } 
+        else if (primaryTabs.includes(tabId)) { const navBtn = document.getElementById('nav-' + tabId); if(navBtn) navBtn.classList.add('active'); }
+        
+        const urGroup = document.getElementById('undo-redo-group');
+        if (urGroup) { urGroup.style.display = (tabId === 'log' || tabId === 'savings') ? 'flex' : 'none'; }
+        
+        if(tabId === 'dashboard' && myChart) myChart.update();
+        if(tabId === 'insights') {
+            if(recapChart) recapChart.update();
+            if(tripChart) setTimeout(() => tripChart.update(), 50);
+        }
+    }
+
+    function openSubView(subId) {
+        triggerHaptic(10);
+        document.getElementById('main-header').style.display = 'none';
+        document.getElementById('more-main-menu').style.display = 'none';
+        document.querySelectorAll('div[id^="sub-"]').forEach(sub => sub.style.display = 'none');
+        document.getElementById(subId).style.display = 'block';
+        window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+    
+    function closeSubView(subId) {
+        triggerHaptic(10);
+        document.getElementById(subId).style.display = 'none';
+        document.getElementById('more-main-menu').style.display = 'block';
+        document.getElementById('main-header').style.display = 'flex';
+    }
+
+    function forceAppUpdate() {
+        triggerHaptic(20);
+        if (confirm("Check for new app updates?")) {
+            if ('serviceWorker' in navigator) { navigator.serviceWorker.getRegistrations().then(function(registrations) { for(let registration of registrations) registration.unregister(); }); caches.keys().then(function(names) { for (let name of names) caches.delete(name); }); }
+            setTimeout(() => { window.location.reload(true); }, 500);
+        }
+    }
+
+    function exportData() { triggerHaptic(15); const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data)); const downloadNode = document.createElement('a'); downloadNode.href = dataStr; downloadNode.download = "RupeeTracker_Backup.json"; document.body.appendChild(downloadNode); downloadNode.click(); downloadNode.remove(); }
+    function exportCSV() {
+        triggerHaptic(15);
+        let csvContent = "data:text/csv;charset=utf-8,Month,Date,Type,Category,Account,Amount\n";
+        Object.keys(data.archives).forEach(month => { data.archives[month].forEach(row => { let rDate = row.date || "N/A"; csvContent += `${month},${rDate},${row.type},${row.category},${row.account},${row.amount}\n`; }); });
+        data.history.forEach(row => { let rDate = row.date || "N/A"; csvContent += `Current,${rDate},${row.type},${row.category},${row.account},${row.amount}\n`; });
+        const encodedUri = encodeURI(csvContent); const link = document.createElement("a"); link.href = encodedUri; link.download = "RupeeTracker_Full_History.csv"; document.body.appendChild(link); link.click(); link.remove();
+    }
+    
+    function clearData() { 
+        triggerHaptic(30);
+        if (confirm("⚠️ Are you sure you want to delete ALL your financial data?")) { 
+            localStorage.removeItem('financeData'); data = { upi: 0, cash: 0, savings: 0, history: [], ious: [], currentMonth: new Date().toISOString().slice(0, 7), archives: {}, goals: [], budgets: {}, recentPayees: ['Ganesh', 'Meghraj', 'Yusuf'], wishlist: [], rollovers: {} }; undoStack = []; redoStack = []; updateUI(); switchTab('dashboard', document.getElementById('nav-dashboard')); alert("Data successfully erased."); 
+        } 
+    }
+
+    checkMonthlyReset(); setTimeout(updateUI, 100);
+</script>
+
+</body>
+</html>
